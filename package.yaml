@@ -1,0 +1,68 @@
+name:                Scrabble
+version:             0.1.0.0
+github:              "undergroundquizscene/Scrabble"
+license:             BSD3
+author:              "Noel Bourke"
+maintainer:          "undergroundquizscene@protonmail.com"
+copyright:           "Noel Bourke"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+# synopsis:            Short description of your package
+# category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on GitHub at <https://github.com/undergroundquizscene/Scrabble#readme>
+
+dependencies:
+- base >= 4.7 && < 5
+- io-streams >= 1.5 && < 1.6
+- aeson >= 1.4.5 && < 1.5
+- network >= 3 && < 3.2
+- bytestring >= 0.10.8.2 && < 0.11
+- random
+
+library:
+  source-dirs: src
+
+executables:
+  Scrabble-exe:
+    main:                Main.hs
+    source-dirs:         app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Scrabble
+  Client-exe:
+    main: Client.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Scrabble
+  Server-exe:
+    main: Server.hs
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+
+
+tests:
+  Scrabble-test:
+    main:                Spec.hs
+    source-dirs:         test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - Scrabble
