@@ -48,7 +48,7 @@ playWord :: GameState -> Play -> Either PlayError GameState
 playWord gs p = undefined
 
 nextTurn :: GameState -> GameState
-nextTurn gs = gs {turnOrder = (drop 1 . turnOrder) gs}
+nextTurn gs = gs {turnOrder = (tail . turnOrder) gs}
 
 main :: IO ()
 main = do

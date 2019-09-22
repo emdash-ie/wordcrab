@@ -48,6 +48,7 @@ main = withSocketsDo $ do
       mPlayerString <- Streams.read inputStream
       case mPlayerString of
         Just playerString -> case JSON.eitherDecodeStrict playerString :: Either String Player of
+
           Left message -> putStrLn "Error:" >> putStrLn message
           Right player -> putStrLn "Reponding…"
             >> Streams.write (Just $ BL.toStrict $ JSON.encode player) outputStream
