@@ -41,7 +41,8 @@ executables:
     dependencies:
     - Scrabble
   Client-exe:
-    main: Client.hs
+    main: Main.hs
+    source-dirs: app/client
     ghc-options:
     - -threaded
     - -rtsopts
@@ -49,11 +50,14 @@ executables:
     dependencies:
     - Scrabble
   Server-exe:
-    main: Server.hs
+    main: Main.hs
+    source-dirs: app/server
     ghc-options:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    dependencies:
+    - Scrabble
 
 
 tests:

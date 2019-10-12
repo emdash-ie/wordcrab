@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- Echo client program
-module Main (main) where
+module Client (main) where
 
 import Scrabble (Player(..), name, tiles, currentScore)
 
