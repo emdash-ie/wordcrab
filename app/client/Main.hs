@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- Echo client program
-module Client (main) where
+module Main (main) where
 
 import Scrabble (Player(..), name, tiles, currentScore)
 
@@ -34,7 +34,7 @@ main = withSocketsDo $ do
       case line of
         "." -> return ()
         name -> do
-          let player = Player { name = name, tiles = [], currentScore = 0 }
+          let player = Player { name = name, rack = [], currentScore = 0 }
           Streams.write (Just $ BL.toStrict $ JSON.encode player) outputStream
           Streams.write (Just "\US") outputStream
           n <- Streams.read inputStream

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- Echo server program
-module Server (main) where
+module Main (main) where
 
 import Control.Concurrent (forkFinally)
 import Control.Monad (unless, forever, void)
