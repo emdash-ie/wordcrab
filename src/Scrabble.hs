@@ -1,18 +1,28 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE TupleSections #-}
 
 module Scrabble where
 
 import           Control.Applicative (liftA2)
+import           Control.Category ((>>>))
+import           Control.Monad ((>=>))
 import           Control.Monad.Trans.State.Lazy
 import           Data.Aeson (ToJSON, FromJSON)
+import           Data.Bifunctor (bimap)
 import           Data.Bool (bool)
-import           Data.Foldable (traverse_)
+import           Data.Foldable (traverse_, fold)
 import           Data.Functor ((<&>))
+import           Data.List (intersperse)
 import           Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import           Data.Maybe (isJust, listToMaybe)
+import           Debug.Trace (trace)
 import           GHC.Generics
 import           System.Random (randomRs, getStdGen)
+import qualified Tiles
+import           Tiles (Tile)
+import qualified Board
+import           Board (Board)
 
 data GameState = GameState
   { tileBag :: [Tile]
@@ -20,21 +30,6 @@ data GameState = GameState
   , turnOrder :: [Player]
   , board :: Board
   }
-
-type Board = [Row]
-type Row = [Maybe PlayedTile]
-data SquareType = NormalSquare | WordMultiplier Integer | LetterMultiplier Integer
-data BoardSquare = BoardSquare SquareType (Maybe PlayedTile)
-data Tile = Blank | Letter LetterTile deriving (Generic, Show)
-instance ToJSON Tile
-instance FromJSON Tile
-data PlayedTile = PlayedBlank Char | PlayedLetter LetterTile deriving (Show)
-data LetterTile = LetterTile
-  { letter :: Char
-  , score :: Integer
-  } deriving (Generic, Show)
-instance ToJSON LetterTile
-instance FromJSON LetterTile
 
 data Player = Player
   { name :: String
@@ -47,13 +42,8 @@ instance ToJSON Player where
 
 instance FromJSON Player
 
-data Position = Position
-  { positionX :: Integer
-  , positionY :: Integer
-  } deriving Show
-
 type Score = Integer
-type WordResult = NonEmpty (PlayedTile, SquareType)
+type WordResult = NonEmpty (Tiles.PlayedTile, Board.SquareType)
 data PlayResult = PlayResult
   { mainWord :: WordResult
   , sideWords :: [WordResult]
@@ -68,16 +58,10 @@ instance Semigroup PlayResult where
              in  f pr <> f pr'
     }
 
-data Direction = Horizontal | Vertical deriving (Show)
-instance Enum Direction where
-  fromEnum Horizontal = 0
-  fromEnum Vertical = 1
-  toEnum = bool Horizontal Vertical . odd
-
 data Play = Play
-  { tiles :: NonEmpty PlayedTile
-  , direction :: Direction
-  , startPosition :: Position
+  { tiles :: NonEmpty Tiles.PlayedTile
+  , direction :: Board.Direction
+  , startPosition :: Board.Position
   } deriving (Show)
 
 instance Semigroup Play where
@@ -88,11 +72,7 @@ play gs p = validatePlay gs p <&> undefined
 
 restOfPlay :: Play -> Maybe Play
 restOfPlay (Play ts d p) = NE.nonEmpty (NE.tail ts)
-                           <&> \ts' -> Play ts' d (forward d p)
-
-forward :: Direction -> Position -> Position
-forward Horizontal p = p { positionX = positionX p + 1 }
-forward Vertical p = p { positionY = positionY p + 1 }
+                           <&> \ts' -> Play ts' d (Board.forward d p)
 
 playTiles :: GameState -> Play -> Maybe (PlayResult, GameState)
 playTiles gs p = let
@@ -112,36 +92,50 @@ playTile :: GameState -> Play -> (PlayResult, GameState)
 playTile = let
   in undefined
 
-updateBoard :: Position -> PlayedTile -> Board -> Maybe Board
-updateBoard _ _ [] = Nothing
-updateBoard (Position x 0) t (r:rs) = fmap (: rs) (updateRow r x t)
-updateBoard (Position x y) t (r:rs) = fmap ((:) r) (updateBoard (Position x (y - 1)) t rs)
+boardFrom :: Board.Position -> Board -> Maybe Board
+boardFrom _ [] = Nothing
+boardFrom (Board.Position 0 0) b = Just b
+boardFrom (Board.Position x 0) rs = traverse (rowFrom x) rs
+boardFrom (Board.Position x y) (_ : rs) = boardFrom (Board.Position x (y - 1)) rs
 
-updateRow :: Row -> Integer -> PlayedTile -> Maybe Row
-updateRow [] _ _ = Nothing
-updateRow (c : cs) 0 t = fmap ((: cs) . Just) (updateCell c t)
-updateRow (c : cs) p t = fmap ((:) c) (updateRow cs (p - 1) t)
+rowFrom :: Integer -> Board.Row -> Maybe Board.Row
+rowFrom _ [] = Nothing
+rowFrom 0 cs = Just cs
+rowFrom p (c : cs) = rowFrom (p - 1) cs
 
-updateCell :: Maybe PlayedTile -> PlayedTile -> Maybe PlayedTile
-updateCell Nothing t = Just t
-updateCell _ _ = Nothing
+columnAt :: Integer -> Board -> Maybe Board.Column
+columnAt = fromIntegral >>> drop >>> (>>> listToMaybe) >>> traverse
 
-perpWord :: GameState -> Position -> Direction -> PlayedTile -> [BoardSquare]
+modifyColumn :: (Board.Column -> Board.Column) -> Integer -> Board -> Maybe Board
+modifyColumn f i b = do
+  let i' = fromIntegral i
+  c <- columnAt i b
+  setColumn i' (f c) b
+
+setColumn :: Int -> Board.Column -> Board -> Maybe Board
+setColumn i c b = let
+  setCell :: Int -> Maybe Tiles.PlayedTile -> Board.Row -> Board.Row
+  setCell j cell r = take j r <> [cell] <> drop (j + 1) r
+  in if i < length b
+     then Just $ zipWith (setCell i) c b
+     else Nothing
+
+perpWord :: GameState -> Board.Position -> Board.Direction -> Tiles.PlayedTile -> [Board.Square]
 perpWord = undefined
 
-perpendicular :: Direction -> Direction
+perpendicular :: Board.Direction -> Board.Direction
 perpendicular = succ
 
-placeTile :: GameState -> Position -> GameState
+placeTile :: GameState -> Board.Position -> GameState
 placeTile = undefined
 
-positionIsEmpty :: GameState -> Position -> Bool
+positionIsEmpty :: GameState -> Board.Position -> Bool
 positionIsEmpty gs p = isJust $ fst $ squareAt gs p
 
-squareAt :: GameState -> Position -> (Maybe Char, BoardSquare)
+squareAt :: GameState -> Board.Position -> (Maybe Char, Board.Square)
 squareAt = undefined
 
-wordAt :: GameState -> Position -> Direction -> [(Char, BoardSquare)]
+wordAt :: GameState -> Board.Position -> Board.Direction -> [(Char, Board.Square)]
 wordAt = undefined
 
 scorePlay :: PlayResult -> Score
