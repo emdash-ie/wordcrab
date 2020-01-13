@@ -5,6 +5,7 @@ import Control.Category ((>>>))
 import Control.Monad ((>=>))
 import Data.Foldable (fold)
 import Data.List (intersperse)
+import Data.Maybe (listToMaybe)
 
 import qualified Tiles
 
@@ -99,3 +100,31 @@ showCell _ = undefined
 
 data SquareType = NormalSquare | WordMultiplier Integer | LetterMultiplier Integer
 data Square = Square SquareType (Maybe Tiles.PlayedTile)
+
+boardFrom :: Board.Position -> Board -> Maybe Board
+boardFrom _ [] = Nothing
+boardFrom (Board.Position 0 0) b = Just b
+boardFrom (Board.Position x 0) rs = traverse (rowFrom x) rs
+boardFrom (Board.Position x y) (_ : rs) = boardFrom (Board.Position x (y - 1)) rs
+
+rowFrom :: Integer -> Board.Row -> Maybe Board.Row
+rowFrom _ [] = Nothing
+rowFrom 0 cs = Just cs
+rowFrom p (_ : cs) = rowFrom (p - 1) cs
+
+columnAt :: Integer -> Board -> Maybe Board.Column
+columnAt = fromIntegral >>> drop >>> (>>> listToMaybe) >>> traverse
+
+modifyColumn :: (Board.Column -> Board.Column) -> Integer -> Board -> Maybe Board
+modifyColumn f i b = do
+  let i' = fromIntegral i
+  c <- columnAt i b
+  setColumn i' (f c) b
+
+setColumn :: Int -> Board.Column -> Board -> Maybe Board
+setColumn i c b = let
+  setCell :: Int -> Maybe Tiles.PlayedTile -> Board.Row -> Board.Row
+  setCell j cell r = take j r <> [cell] <> drop (j + 1) r
+  in if i < length b
+     then Just $ zipWith (setCell i) c b
+     else Nothing
