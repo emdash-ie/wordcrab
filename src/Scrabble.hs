@@ -67,9 +67,6 @@ data Play = Play
 instance Semigroup Play where
   p <> p' = p { tiles = tiles p <> tiles p' }
 
-play :: GameState -> Play -> Maybe (Score, GameState)
-play gs p = validatePlay gs p <&> undefined
-
 restOfPlay :: Play -> Maybe Play
 restOfPlay (Play ts d p) = NE.nonEmpty (NE.tail ts)
                            <&> \ts' -> Play ts' d (Board.forward d p)
@@ -79,7 +76,6 @@ playTiles gs p = let
   -- if the current square is empty:
   --   place a tile and get the perpendicular word (concat both directions, one reversed)
   --   include the square's multiplier
-  (result, gs') = playTile gs p
   -- always:
   --   add the tile on the current square to the main word
   -- finish:
