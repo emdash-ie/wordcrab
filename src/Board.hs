@@ -17,13 +17,13 @@ testBoard :: IO (Maybe ())
 testBoard = let
   display = traverse (putStrLn . showBoard)
   b = blankBoard 10 10
-  moves = updateBoard' (Position 2 5) Horizontal (Tiles.blanks "ab")
-          >=> updateBoard' (Position 1 5) Horizontal (Tiles.blanks "tle")
-          >=> updateBoard' (Position 4 2) Vertical (Tiles.blanks "helo")
-  moves' = updateBoard'' (Position 2 5) Horizontal (Tiles.blanks "ab")
-           >=> updateBoard'' (Position 1 5) Horizontal (Tiles.blanks "tle")
-           >=> updateBoard'' (Position 4 2) Vertical (Tiles.blanks "helo")
-  moves'' = moves' >=> updateBoard'' (Position 1 6) Vertical (Tiles.blanks "hinking")
+  moves = update' (Position 2 5) Horizontal (Tiles.blanks "ab")
+          >=> update' (Position 1 5) Horizontal (Tiles.blanks "tle")
+          >=> update' (Position 4 2) Vertical (Tiles.blanks "helo")
+  moves' = update'' (Position 2 5) Horizontal (Tiles.blanks "ab")
+           >=> update'' (Position 1 5) Horizontal (Tiles.blanks "tle")
+           >=> update'' (Position 4 2) Vertical (Tiles.blanks "helo")
+  moves'' = moves' >=> update'' (Position 1 6) Vertical (Tiles.blanks "hinking")
   in putStrLn "1:"
      >> display (moves b)
      >> putStrLn "2:"
@@ -34,21 +34,18 @@ testBoard = let
 blankBoard :: Integer -> Integer -> Board
 blankBoard x y = Board $ replicate (fromIntegral x) (replicate (fromIntegral y) Nothing)
 
-updateBoard'' :: Position -> Direction -> [Tiles.PlayedTile] -> Board -> Maybe Board
-updateBoard'' p Horizontal ts b = updateBoard' p Horizontal ts b
-updateBoard'' p Vertical ts b = transpose <$> updateBoard' (swap p) Horizontal ts (transpose b)
+update'' :: Position -> Direction -> [Tiles.PlayedTile] -> Board -> Maybe Board
+update'' p Horizontal ts b = update' p Horizontal ts b
+update'' p Vertical ts b = transpose <$> update' (swap p) Horizontal ts (transpose b)
 
-
-updateBoard' :: Position -> Direction -> [Tiles.PlayedTile] -> Board -> Maybe Board
-updateBoard' _ _ _ (Board []) = Nothing
-updateBoard' _ _ [] b = Just b
-updateBoard' p _ [t] b = updateBoard p t b
-updateBoard' p d (t:ts) b = do
+update' :: Position -> Direction -> [Tiles.PlayedTile] -> Board -> Maybe Board
+update' _ _ _ (Board []) = Nothing
+update' _ _ [] b = Just b
+update' p _ [t] b = updateBoard p t b
+update' p d (t:ts) b = do
   b' <- updateBoard p t b
-  updateBoard' (forward d p) d ts b'
+  update' (forward d p) d ts b'
 
--- Maybe add a Direction parameter to this to decide whether to updateRow or
--- updateColumn?
 updateBoard :: Position -> Tiles.PlayedTile -> Board -> Maybe Board
 updateBoard _ _ (Board []) = Nothing
 updateBoard (Position x 0) t (Board (r:rs)) = fmap ((: rs) >>> Board) (updateRow r x t)
