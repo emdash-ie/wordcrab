@@ -31,7 +31,7 @@ testBoard = let
      >> putStrLn "3:"
      >> display (moves'' b)
 
-blankBoard :: Integer -> Integer -> Board
+blankBoard :: Int -> Int -> Board
 blankBoard x y = Board $ replicate (fromIntegral x) (replicate (fromIntegral y) Nothing)
 
 update'' :: Position -> Direction -> [Tiles.PlayedTile] -> Board -> Maybe Board
@@ -53,7 +53,7 @@ updateBoard (Position x y) t (Board (r:rs)) =
   fmap (\(Board rs) -> Board (r : rs))
   (updateBoard (Position x (y - 1)) t (Board rs))
 
-updateRow :: Row -> Integer -> Tiles.PlayedTile -> Maybe Row
+updateRow :: Row -> Int -> Tiles.PlayedTile -> Maybe Row
 updateRow [] _ _ = Nothing
 updateRow (c@(Just _) : cs) 0 t = (:) c <$> updateRow cs 0 t
 updateRow (c : cs) 0 t = fmap ((: cs) . Just) (updateCell c t)
@@ -79,9 +79,13 @@ forward :: Direction -> Position -> Position
 forward Horizontal p = p { positionX = positionX p + 1 }
 forward Vertical p = p { positionY = positionY p + 1 }
 
+backward :: Direction -> Position -> Position
+backward Horizontal p = p { positionX = positionX p - 1 }
+backward Vertical p = p { positionY = positionY p - 1 }
+
 data Position = Position
-  { positionX :: Integer
-  , positionY :: Integer
+  { positionX :: Int
+  , positionY :: Int
   } deriving Show
 
 showBoard :: Board -> String
@@ -97,7 +101,7 @@ showCell Nothing = "_"
 showCell (Just (Tiles.PlayedBlank c)) = [c]
 showCell _ = undefined
 
-data SquareType = NormalSquare | WordMultiplier Integer | LetterMultiplier Integer
+data SquareType = NormalSquare | WordMultiplier Int | LetterMultiplier Int
 data Square = Square SquareType (Maybe Tiles.PlayedTile)
 
 boardFrom :: Board.Position -> Board -> Maybe Board
@@ -106,15 +110,15 @@ boardFrom (Board.Position 0 0) b = Just b
 boardFrom (Board.Position x 0) (Board rs) = Board <$> traverse (rowFrom x) rs
 boardFrom (Board.Position x y) (Board (_ : rs)) = boardFrom (Board.Position x (y - 1)) (Board rs)
 
-rowFrom :: Integer -> Board.Row -> Maybe Board.Row
+rowFrom :: Int -> Board.Row -> Maybe Board.Row
 rowFrom _ [] = Nothing
 rowFrom 0 cs = Just cs
 rowFrom p (_ : cs) = rowFrom (p - 1) cs
 
-columnAt :: Integer -> Board -> Maybe Board.Column
+columnAt :: Int -> Board -> Maybe Board.Column
 columnAt i (Board rs) = traverse listToMaybe $ drop (fromIntegral i) rs
 
-modifyColumn :: (Board.Column -> Board.Column) -> Integer -> Board -> Maybe Board
+modifyColumn :: (Board.Column -> Board.Column) -> Int -> Board -> Maybe Board
 modifyColumn f i b = do
   let i' = fromIntegral i
   c <- columnAt i b

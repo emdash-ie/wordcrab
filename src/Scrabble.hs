@@ -70,56 +70,8 @@ playTiles gs p = let
 nextTurn :: GameState -> GameState
 nextTurn gs = gs {turnOrder = (tail . turnOrder) gs}
 
--- take a play, determine whether it’s valid (fits on the board)
-  -- if so, return the squares the play is on
-  -- if not, return an error
-validate :: Play -> Board -> ValidatedPlay
-validate p b = case direction p of
-  Board.Horizontal -> update' p b
-  Board.Vertical -> let
-    vp = update' (swap p) (Board.transpose b)
-    transpose' = \pr@PlayResult{..} -> pr { resultingBoard = Board.transpose resultingBoard }
-    in fmap transpose' vp
-
 swap :: Play -> Play
 swap p@Play{..} = p { startPosition = Board.swap startPosition }
-
-update' :: Play -> Board -> ValidatedPlay
-update' _ (Board []) = Left TooLong
-update' p b = let
-  partialResult = update (startPosition p) (direction p) (NE.head $ tiles p) b
-  in case restOfPlay p of
-     Nothing -> partialResult
-     Just p' -> do
-       pr <- partialResult
-       update' p' (resultingBoard pr)
-
-update ::
-  Board.Position ->
-  Board.Direction ->
-  Tiles.PlayedTile ->
-  Board ->
-  ValidatedPlay
-update _ _ _ (Board []) = Left TooLong
-update (Board.Position x 0) d t (Board (r:rs)) = do
-  (updatedRow, mainWord, perpWord) <- updateRow r x t
-  let updatedBoard = Board (updatedRow : rs)
-  pure (PlayResult [mainWord] [perpWord] updatedBoard)
-update (Board.Position x y) d t (Board (r:rs)) =
-  fmap (\(p@PlayResult{..}) -> p { resultingBoard = Board (r : rs) })
-  (update (Board.Position x (y - 1)) d t (Board rs))
-
-updateRow ::
-  Board.Row ->
-  Integer ->
-  Tiles.PlayedTile ->
-  Either PlayError (Board.Row, (Board.SquareType, Tile), Word)
-updateRow [] _ _ = Left TooLong
-updateRow (c@(Just _) : cs) 0 t = do
-  (row, played, perpWord) <- updateRow cs 0 t
-  pure (c : row, played, perpWord)
-updateRow (c : cs) 0 t = Right $ updateCell c t : cs
-updateRow (c : cs) p t = fmap ((:) c) (updateRow cs (p - 1) t)
 
 updateCell :: Maybe Tiles.PlayedTile -> Tiles.PlayedTile -> Maybe Tiles.PlayedTile
 updateCell Nothing t = Just t
