@@ -101,13 +101,13 @@ play ::
   Board.Direction ->
   NonEmpty Tiles.PlayedTile ->
   Board ->
-  Maybe (Board, NonEmpty Tiles.PlayedTile, NonEmpty [Tiles.PlayedTile])
+  Maybe (Board, NonEmpty Tiles.PlayedTile, [[Tiles.PlayedTile]])
 play p d ts b = do
   indices <- playIndices p d ts b
   -- check indices for neighbouring word
   let b' = writeSeveral indices b
   let mainWord = NE.fromList $ wordAt (fst $ NE.head indices) d b'
-  let perpWords = fmap (\(i, _) -> wordAt i (succ d) b') indices
+  let perpWords = NE.filter ((> 1) . length) $ fmap (\(i, _) -> wordAt i (succ d) b') indices
   pure (b', mainWord, perpWords)
 
 testBoard :: IO ()
@@ -126,10 +126,10 @@ testBoard = let
     play (Board.Position 1 6) Board.Vertical (NE.fromList $ Tiles.blanks "hink") b'''
   t5@(b5, mw5, pw5) = fromJust $
     play (Board.Position 5 6) Board.Horizontal (NE.fromList $ Tiles.blanks "xen") b''''
-  fullSequence = putStrLn "1:" >> display t1
-                 >> putStrLn "2:" >> display t2
-                 >> putStrLn "3:" >> display t3
-                 >> putStrLn "4:" >> display t4
+  fullSequence = putStrLn "1:" >> display t1 >> getLine
+                 >> putStrLn "2:" >> display t2 >> getLine
+                 >> putStrLn "3:" >> display t3 >> getLine
+                 >> putStrLn "4:" >> display t4 >> getLine
                  >> putStrLn "5:" >> display t5
   in fullSequence
 
