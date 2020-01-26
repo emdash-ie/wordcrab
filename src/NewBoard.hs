@@ -24,10 +24,10 @@ newtype ValidPosition = ValidPosition Board.Position deriving Show
 
 validatePosition :: Board.Position -> Board -> Maybe ValidPosition
 validatePosition p (Board rs) = let
-  validY = Board.positionY p < fromIntegral (length rs)
+  validY = Board.positionY p < fromIntegral (length rs) && Board.positionY p > 0
   validX = case rs V.!? 0 of
     Nothing -> False
-    Just (Row ts) -> Board.positionX p < fromIntegral (length ts)
+    Just (Row ts) -> Board.positionX p < fromIntegral (length ts) && Board.positionX p > 0
   in bool Nothing (Just $ ValidPosition p) (validY && validX)
 
 blankBoard :: Integer -> Integer -> Board
