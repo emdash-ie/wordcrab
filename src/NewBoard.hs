@@ -20,7 +20,7 @@ import qualified Tiles
 newtype Board = Board { unBoard :: Vector Row }
 newtype Row = Row { unRow :: Vector (Maybe Tiles.PlayedTile) }
 
-newtype ValidPosition = ValidPosition Board.Position
+newtype ValidPosition = ValidPosition Board.Position deriving Show
 
 validatePosition :: Board.Position -> Board -> Maybe ValidPosition
 validatePosition p (Board rs) = let
@@ -82,7 +82,7 @@ startOfWord vp@(ValidPosition p) d b =
   case validatePosition (Board.backward d p) b of
     Nothing -> vp
     Just p' -> case lookup b p' of
-      Nothing -> p'
+      Nothing -> vp
       Just _ -> startOfWord p' d b
 
 wordFrom ::
@@ -123,12 +123,15 @@ testBoard = let
   t3@(b''', mw''', pw''') = fromJust $
     play (Board.Position 4 2) Board.Vertical (NE.fromList $ Tiles.blanks "helo") b''
   t4@(b'''', mw'''', pw'''') = fromJust $
-    play (Board.Position 1 6) Board.Vertical (NE.fromList $ Tiles.blanks "hinking") b'''
+    play (Board.Position 1 6) Board.Vertical (NE.fromList $ Tiles.blanks "hink") b'''
+  t5@(b5, mw5, pw5) = fromJust $
+    play (Board.Position 5 6) Board.Horizontal (NE.fromList $ Tiles.blanks "xen") b''''
   fullSequence = putStrLn "1:" >> display t1
                  >> putStrLn "2:" >> display t2
                  >> putStrLn "3:" >> display t3
                  >> putStrLn "4:" >> display t4
-  in print $ wordAt (ValidPosition $ Board.Position 2 5) Board.Horizontal b'
+                 >> putStrLn "5:" >> display t5
+  in fullSequence
 
 showBoard :: Board -> String
 showBoard (Board rs) = let
