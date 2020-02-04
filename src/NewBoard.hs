@@ -3,7 +3,7 @@ module NewBoard where
 
 import Control.Category ((>>>))
 import Control.Monad ((>=>), guard)
-import Data.Bifunctor (second)
+import Data.Bifunctor (first, second)
 import Data.Bool (bool)
 import Data.Foldable (fold)
 import Data.Function ((&))
@@ -26,7 +26,7 @@ newtype Row = Row { unRow :: Vector (Square (Maybe Tiles.PlayedTile)) }
 data SquareType = Normal | WordMultiplier Int | LetterMultiplier Int deriving Show
 data Square a = Square { squareType :: SquareType, squareContents :: a } deriving Show
 
-newtype ValidPosition = ValidPosition { unwrapPosition :: Board.Position } deriving Show
+newtype ValidPosition = ValidPosition { unwrapPosition :: Board.Position } deriving (Eq, Show)
 
 validatePosition :: Board.Position -> Board -> Maybe ValidPosition
 validatePosition p (Board rs) = let
@@ -113,7 +113,7 @@ wordAt ::
   ValidPosition ->
   Board.Direction ->
   Board ->
-  [Square Tiles.PlayedTile]
+  [(ValidPosition, Square Tiles.PlayedTile)]
 wordAt p d b = wordFrom (startOfWord p d b) d b
 
 startOfWord ::
@@ -132,27 +132,33 @@ wordFrom ::
   ValidPosition ->
   Board.Direction ->
   Board ->
-  [Square Tiles.PlayedTile]
+  [(ValidPosition, Square Tiles.PlayedTile)]
 wordFrom vp@(ValidPosition p) d b = case lookup b vp of
   Square _ Nothing -> []
   Square st (Just t) -> case validatePosition (Board.forward d p) b of
-    Nothing -> [Square st t]
-    Just vp' -> Square st t : wordFrom vp' d b
+    Nothing -> [(vp, Square st t)]
+    Just vp' -> (vp, Square st t) : wordFrom vp' d b
+
+type Play = (Board, NonEmpty TileInPlay, [[TileInPlay]])
+type TileInPlay = (PlayedWhen, Square Tiles.PlayedTile)
+data PlayedWhen = ThisTime | Before deriving (Show, Eq)
 
 play ::
   Board.Position ->
   Board.Direction ->
   NonEmpty Tiles.PlayedTile ->
   Board ->
-  Maybe (Board, NonEmpty (Square Tiles.PlayedTile), [[Square Tiles.PlayedTile]])
+  Maybe Play
 play p d ts b = do
   indices <- playIndices p d ts b
-  guard (bordersWord (fmap fst indices) b
+  let playedIndices = fmap fst indices
+  guard (bordersWord playedIndices b
          || elem (Board.Position 7 7) (fmap (fst >>> unwrapPosition) indices))
   let b' = writeSeveral (NE.map (second (\(Square _ x) -> x)) indices) b
-  let mainWord = NE.fromList $ wordAt (fst $ NE.head indices) d b'
-  let perpWords = NE.filter ((> 1) . length) $ fmap (\(i, _) -> wordAt i (succ d) b') indices
-  pure (b', mainWord, perpWords)
+  let mainWord = NE.fromList $ wordAt (NE.head playedIndices) d b'
+  let perpWords = NE.filter ((> 1) . length) $ fmap (\i -> wordAt i (succ d) b') playedIndices
+  let active = first (\p  -> bool Before ThisTime (p `elem` playedIndices))
+  pure (b', fmap active mainWord, (fmap . fmap) active perpWords)
 
 testBoard :: IO ()
 testBoard = let
@@ -161,15 +167,16 @@ testBoard = let
     >> putStrLn "Perp words:" >> print pws
   b = blankBoard
   t1@(b', mw', pw') = fromJust $
-    play (Board.Position 7 7) Board.Horizontal (NE.fromList $ Tiles.blanks "ab") b
+    play (Board.Position 7 7) Board.Horizontal
+      (fmap Tiles.PlayedLetter (Tiles.a :| [Tiles.b])) b
   t2@(b'', mw'', pw'') = fromJust $
-    play (Board.Position 6 7) Board.Horizontal (NE.fromList $ Tiles.blanks "tle") b'
+    play (Board.Position 6 7) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.t :| [Tiles.l, Tiles.e])) b'
   t3@(b''', mw''', pw''') = fromJust $
-    play (Board.Position 9 4) Board.Vertical (NE.fromList $ Tiles.blanks "helo") b''
+    play (Board.Position 9 4) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.e, Tiles.l, Tiles.o])) b''
   t4@(b'''', mw'''', pw'''') = fromJust $
-    play (Board.Position 6 8) Board.Vertical (NE.fromList $ Tiles.blanks "hink") b'''
+    play (Board.Position 6 8) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.i, Tiles.n, Tiles.k])) b'''
   t5@(b5, mw5, pw5) = fromJust $
-    play (Board.Position 10 8) Board.Horizontal (NE.fromList $ Tiles.blanks "xen") b''''
+    play (Board.Position 10 8) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.x :| [Tiles.e, Tiles.n])) b''''
   fullSequence = putStrLn "1:" >> display t1 >> getLine
                  >> putStrLn "2:" >> display t2 >> getLine
                  >> putStrLn "3:" >> display t3 >> getLine
@@ -188,5 +195,5 @@ showRow (Row ts) = fmap showCell ts & V.toList & intersperse "|" & fold
 showCell :: Square (Maybe Tiles.PlayedTile) -> String
 showCell (Square _ Nothing) = "_"
 showCell (Square _ (Just (Tiles.PlayedBlank c))) = [c]
-showCell _ = undefined
+showCell (Square _ (Just (Tiles.PlayedLetter lt))) = [Tiles.letter lt]
 
