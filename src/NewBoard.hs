@@ -2,15 +2,17 @@
 module NewBoard where
 
 import Control.Category ((>>>))
-import Control.Monad ((>=>))
+import Control.Monad ((>=>), guard)
 import Data.Bifunctor (second)
 import Data.Bool (bool)
 import Data.Foldable (fold)
 import Data.Function ((&))
+import Data.Functor ((<&>))
 import Data.List (intersperse)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (fromJust)
+import Data.Maybe (fromJust, isJust, catMaybes)
+import Data.Monoid (Any(..))
 import qualified Data.Vector as V
 import Data.Vector (Vector)
 import Prelude hiding (lookup)
@@ -22,9 +24,9 @@ newtype Board = Board { unBoard :: Vector Row }
 newtype Row = Row { unRow :: Vector (Square (Maybe Tiles.PlayedTile)) }
 
 data SquareType = Normal | WordMultiplier Int | LetterMultiplier Int deriving Show
-data Square a = Square SquareType a deriving Show
+data Square a = Square { squareType :: SquareType, squareContents :: a } deriving Show
 
-newtype ValidPosition = ValidPosition Board.Position deriving Show
+newtype ValidPosition = ValidPosition { unwrapPosition :: Board.Position } deriving Show
 
 validatePosition :: Board.Position -> Board -> Maybe ValidPosition
 validatePosition p (Board rs) = let
@@ -34,23 +36,38 @@ validatePosition p (Board rs) = let
     Just (Row ts) -> Board.positionX p < fromIntegral (length ts) && Board.positionX p > 0
   in bool Nothing (Just $ ValidPosition p) (validY && validX)
 
-blankBoard :: Integer -> Integer -> Board
-blankBoard columns rows = Board $ V.replicate (fromIntegral rows)
-                            $ Row $ V.replicate (fromIntegral columns) (Square Normal Nothing)
+blankBoard :: Board
+blankBoard = let
+  squares = (fmap . fmap) (\t -> Square t Nothing) squareTypes
+  in Board $ V.fromList $ fmap (V.fromList >>> Row) squares
+
+squareTypes :: [[SquareType]]
+squareTypes = let
+  n = Normal
+  dl = LetterMultiplier 2
+  tl = LetterMultiplier 3
+  dw = WordMultiplier 2
+  tw = WordMultiplier 3
+  upperLeft = [[tw, n, n, dl, n, n, n, tw], [n, dw, n, n, n, tl, n, n],
+               [n, n, dw, n, n, n, dl, n],  [dl, n, n, dw, n, n, n, dl],
+               [n, n, n, n, dw, n, n, n],   [n, tl, n, n, n, tl, n, n],
+               [n, n, dl, n, n, n, dl, n],  [tw, n, n, dl, n, n, n, dw]]
+  reflect xs = xs <> tail (reverse xs)
+  in reflect (fmap reflect upperLeft)
 
 lookup :: Board -> ValidPosition -> Square (Maybe Tiles.PlayedTile)
 lookup (Board rs) (ValidPosition p) = unRow (rs V.! Board.positionY p) V.! Board.positionX p
 
 update :: Board -> ValidPosition -> Tiles.PlayedTile -> Maybe Board
-update b p t = case lookup b p of
-  Square _ (Just _) -> Nothing
-  Square _ Nothing -> Just $ write b p t
+update b p t = case squareContents $ lookup b p of
+  Just _ -> Nothing
+  Nothing -> Just $ write b p t
 
 write :: Board -> ValidPosition -> Tiles.PlayedTile -> Board
 write (Board rs) (ValidPosition p) t = let
   Row oldRow = rs V.! Board.positionY p
-  Square squareType _ = oldRow V.! Board.positionX p
-  newRow = Row $ oldRow V.// [(Board.positionX p, Square squareType (Just t))]
+  s = oldRow V.! Board.positionX p
+  newRow = Row $ oldRow V.// [(Board.positionX p, Square (squareType s) (Just t))]
   in Board (rs V.// [(Board.positionY p, newRow)])
 
 writeSeveral :: Foldable a => a (ValidPosition, Tiles.PlayedTile) -> Board -> Board
@@ -70,6 +87,27 @@ playIndices p d ts b = do
         (t, Nothing) -> Just $ (vp, Square st t) :| []
         (t, Just ts') -> NE.cons (vp, Square st t)
                            <$> playIndices (Board.forward d p) d ts' b
+
+bordersWord ::
+  NonEmpty ValidPosition ->
+  Board ->
+  Bool
+bordersWord ps b = let
+  hasNeighbours p = any (squareContents >>> isJust) (neighbours p b)
+  in any hasNeighbours ps
+
+neighbours ::
+  ValidPosition ->
+  Board ->
+  NonEmpty (Square (Maybe Tiles.PlayedTile))
+neighbours (ValidPosition p) b = let
+  f p' = validatePosition p' b <&> lookup b
+  above = f (Board.backward Board.Vertical p)
+  below = f (Board.forward Board.Vertical p)
+  right = f (Board.backward Board.Horizontal p)
+  left = f (Board.forward Board.Horizontal p)
+  -- | fromList: Every space has at least two valid neighbours
+  in NE.fromList (catMaybes [above, below, right, left])
 
 wordAt ::
   ValidPosition ->
@@ -109,7 +147,8 @@ play ::
   Maybe (Board, NonEmpty (Square Tiles.PlayedTile), [[Square Tiles.PlayedTile]])
 play p d ts b = do
   indices <- playIndices p d ts b
-  -- check indices for neighbouring word
+  guard (bordersWord (fmap fst indices) b
+         || elem (Board.Position 7 7) (fmap (fst >>> unwrapPosition) indices))
   let b' = writeSeveral (NE.map (second (\(Square _ x) -> x)) indices) b
   let mainWord = NE.fromList $ wordAt (fst $ NE.head indices) d b'
   let perpWords = NE.filter ((> 1) . length) $ fmap (\(i, _) -> wordAt i (succ d) b') indices
@@ -120,17 +159,17 @@ testBoard = let
   display (b, mw, pws) = putStrLn (showBoard b)
     >> putStrLn "Main word:" >> print mw
     >> putStrLn "Perp words:" >> print pws
-  b = blankBoard 10 10
+  b = blankBoard
   t1@(b', mw', pw') = fromJust $
-    play (Board.Position 2 5) Board.Horizontal (NE.fromList $ Tiles.blanks "ab") b
+    play (Board.Position 7 7) Board.Horizontal (NE.fromList $ Tiles.blanks "ab") b
   t2@(b'', mw'', pw'') = fromJust $
-    play (Board.Position 1 5) Board.Horizontal (NE.fromList $ Tiles.blanks "tle") b'
+    play (Board.Position 6 7) Board.Horizontal (NE.fromList $ Tiles.blanks "tle") b'
   t3@(b''', mw''', pw''') = fromJust $
-    play (Board.Position 4 2) Board.Vertical (NE.fromList $ Tiles.blanks "helo") b''
+    play (Board.Position 9 4) Board.Vertical (NE.fromList $ Tiles.blanks "helo") b''
   t4@(b'''', mw'''', pw'''') = fromJust $
-    play (Board.Position 1 6) Board.Vertical (NE.fromList $ Tiles.blanks "hink") b'''
+    play (Board.Position 6 8) Board.Vertical (NE.fromList $ Tiles.blanks "hink") b'''
   t5@(b5, mw5, pw5) = fromJust $
-    play (Board.Position 5 6) Board.Horizontal (NE.fromList $ Tiles.blanks "xen") b''''
+    play (Board.Position 10 8) Board.Horizontal (NE.fromList $ Tiles.blanks "xen") b''''
   fullSequence = putStrLn "1:" >> display t1 >> getLine
                  >> putStrLn "2:" >> display t2 >> getLine
                  >> putStrLn "3:" >> display t3 >> getLine

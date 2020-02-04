@@ -86,7 +86,7 @@ backward Vertical p = p { positionY = positionY p - 1 }
 data Position = Position
   { positionX :: Int
   , positionY :: Int
-  } deriving Show
+  } deriving (Show, Eq)
 
 showBoard :: Board -> String
 showBoard (Board rs) = let
