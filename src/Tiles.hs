@@ -17,6 +17,10 @@ data LetterTile = LetterTile
 instance ToJSON LetterTile
 instance FromJSON LetterTile
 
+tileScore :: PlayedTile -> Integer
+tileScore (PlayedBlank _) = 0
+tileScore (PlayedLetter lt) = score lt
+
 blanks :: String -> [PlayedTile]
 blanks = fmap PlayedBlank
 
@@ -65,7 +69,7 @@ d :: LetterTile
 d = LetterTile 'D' 2
 
 e :: LetterTile
-e = LetterTile 'E' 2
+e = LetterTile 'E' 1
 
 f :: LetterTile
 f = LetterTile 'F' 4

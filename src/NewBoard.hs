@@ -26,6 +26,15 @@ newtype Row = Row { unRow :: Vector (Square (Maybe Tiles.PlayedTile)) }
 data SquareType = Normal | WordMultiplier Int | LetterMultiplier Int deriving Show
 data Square a = Square { squareType :: SquareType, squareContents :: a } deriving Show
 
+isWordMultiplier :: SquareType -> Bool
+isWordMultiplier (WordMultiplier _) = True
+isWordMultiplier _ = False
+
+totalWordMultiplier :: [SquareType] -> Int
+totalWordMultiplier = filter isWordMultiplier
+  >>> fmap (\(WordMultiplier n) -> n)
+  >>> product
+
 newtype ValidPosition = ValidPosition { unwrapPosition :: Board.Position } deriving (Eq, Show)
 
 validatePosition :: Board.Position -> Board -> Maybe ValidPosition
@@ -141,14 +150,14 @@ wordFrom vp@(ValidPosition p) d b = case lookup b vp of
 
 type Play = (Board, NonEmpty TileInPlay, [[TileInPlay]])
 type TileInPlay = (PlayedWhen, Square Tiles.PlayedTile)
-data PlayedWhen = ThisTime | Before deriving (Show, Eq)
+data PlayedWhen = PlayedNow | PlayedEarlier deriving (Show, Eq)
 
 play ::
   Board.Position ->
   Board.Direction ->
   NonEmpty Tiles.PlayedTile ->
   Board ->
-  Maybe Play
+  Maybe (Play, Integer)
 play p d ts b = do
   indices <- playIndices p d ts b
   let playedIndices = fmap fst indices
@@ -157,26 +166,47 @@ play p d ts b = do
   let b' = writeSeveral (NE.map (second (\(Square _ x) -> x)) indices) b
   let mainWord = NE.fromList $ wordAt (NE.head playedIndices) d b'
   let perpWords = NE.filter ((> 1) . length) $ fmap (\i -> wordAt i (succ d) b') playedIndices
-  let active = first (\p  -> bool Before ThisTime (p `elem` playedIndices))
-  pure (b', fmap active mainWord, (fmap . fmap) active perpWords)
+  let active = first (\i  -> bool PlayedEarlier PlayedNow (i `elem` playedIndices))
+  let play = (b', fmap active mainWord, (fmap . fmap) active perpWords)
+  pure (play, score play)
+
+score :: Play -> Integer
+score (_, mainWord, perpWords) =
+  scoreWord (NE.toList mainWord) + sum (fmap scoreWord perpWords)
+
+scoreWord :: [TileInPlay] -> Integer
+scoreWord ts = let
+  activeMultipliers = fmap (snd . second squareType)
+                $ filter (fst >>> (==) PlayedNow) ts
+  wordMultiplier = fromIntegral $ totalWordMultiplier activeMultipliers
+  letterScore (PlayedNow, Square (LetterMultiplier n) t) = fromIntegral n * Tiles.tileScore t
+  letterScore (_, Square _ t) = Tiles.tileScore t
+  in wordMultiplier * sum (fmap letterScore ts)
 
 testBoard :: IO ()
 testBoard = let
-  display (b, mw, pws) = putStrLn (showBoard b)
-    >> putStrLn "Main word:" >> print mw
-    >> putStrLn "Perp words:" >> print pws
+  display ((b, mw, pws), s) = putStrLn (showBoard b)
+    >> putStrLn "Main word:" >> traverse (showTile >>> putStrLn) mw
+    >> putStrLn "Perp words:" >> traverse (fmap showTile >>> traverse putStrLn) pws
+    >> putStrLn ("Score: " <> show s)
+  showTile :: TileInPlay -> String
+  showTile (when, square) = let
+    active = case when of PlayedNow -> " (*)"
+                          PlayedEarlier -> ""
+    in "- " <> show (squareType square) <> active <> ": "
+       <> show (squareContents square)
   b = blankBoard
-  t1@(b', mw', pw') = fromJust $
+  t1@((b1, mw1, pw1), s1) = fromJust $
     play (Board.Position 7 7) Board.Horizontal
       (fmap Tiles.PlayedLetter (Tiles.a :| [Tiles.b])) b
-  t2@(b'', mw'', pw'') = fromJust $
-    play (Board.Position 6 7) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.t :| [Tiles.l, Tiles.e])) b'
-  t3@(b''', mw''', pw''') = fromJust $
-    play (Board.Position 9 4) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.e, Tiles.l, Tiles.o])) b''
-  t4@(b'''', mw'''', pw'''') = fromJust $
-    play (Board.Position 6 8) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.i, Tiles.n, Tiles.k])) b'''
-  t5@(b5, mw5, pw5) = fromJust $
-    play (Board.Position 10 8) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.x :| [Tiles.e, Tiles.n])) b''''
+  t2@((b2, mw2, pw2), s2) = fromJust $
+    play (Board.Position 6 7) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.t :| [Tiles.l, Tiles.e])) b1
+  t3@((b3, mw3, pw3), s3) = fromJust $
+    play (Board.Position 9 4) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.e, Tiles.l])) b2
+  t4@((b4, mw4, pw4), s4) = fromJust $
+    play (Board.Position 6 8) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.i, Tiles.n, Tiles.k])) b3
+  t5@((b5, mw5, pw5), s5) = fromJust $
+    play (Board.Position 9 8) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.o :| [Tiles.x, Tiles.e, Tiles.n])) b4
   fullSequence = putStrLn "1:" >> display t1 >> getLine
                  >> putStrLn "2:" >> display t2 >> getLine
                  >> putStrLn "3:" >> display t3 >> getLine
