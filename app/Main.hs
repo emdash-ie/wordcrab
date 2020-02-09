@@ -1,4 +1,10 @@
 module Main where
 
+import System.Random (getStdGen)
+import System.Random.Shuffle (shuffle')
+
 main :: IO ()
-main = putStrLn "Hello, Haskell!"
+main = do
+  gen <- getStdGen
+  let things = [1..10]
+  print $ shuffle' things (length things) gen

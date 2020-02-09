@@ -28,6 +28,7 @@ dependencies:
 - random
 - transformers >= 0.5.6 && < 0.6
 - vector
+- random-shuffle
 
 library:
   source-dirs: src

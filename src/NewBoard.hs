@@ -1,8 +1,7 @@
-{-# LANGUAGE RecordWildCards #-}
 module NewBoard where
 
 import Control.Category ((>>>))
-import Control.Monad ((>=>), guard)
+import Control.Monad (guard)
 import Data.Bifunctor (first, second)
 import Data.Bool (bool)
 import Data.Foldable (fold)
@@ -12,7 +11,6 @@ import Data.List (intersperse)
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromJust, isJust, catMaybes)
-import Data.Monoid (Any(..))
 import qualified Data.Vector as V
 import Data.Vector (Vector)
 import Prelude hiding (lookup)
