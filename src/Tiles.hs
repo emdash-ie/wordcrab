@@ -6,14 +6,14 @@ import Control.Monad (join)
 import Data.Aeson (ToJSON, FromJSON)
 import GHC.Generics
 
-data Tile = Blank | Letter LetterTile deriving (Generic, Show)
+data Tile = Blank | Letter LetterTile deriving (Generic, Show, Eq)
 instance ToJSON Tile
 instance FromJSON Tile
 data PlayedTile = PlayedBlank Char | PlayedLetter LetterTile deriving (Show)
 data LetterTile = LetterTile
   { letter :: Char
   , score :: Integer
-  } deriving (Generic, Show)
+  } deriving (Generic, Show, Eq)
 instance ToJSON LetterTile
 instance FromJSON LetterTile
 
