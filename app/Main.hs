@@ -1,6 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
+import Brick (App(..), defaultMain, attrMap)
+import qualified Brick
+import Brick.Widgets.Center (center)
 import Control.Category ((>>>))
 import Control.Monad (guard)
 import Data.Char (toLower, toUpper)
@@ -8,11 +11,11 @@ import Data.List (lookup, (\\))
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (fromJust, listToMaybe)
+import Graphics.Vty (defAttr, Key(..), Event(..))
 import Prelude hiding (lookup)
 import System.Random (getStdGen, StdGen)
 import System.Random.Shuffle (shuffle')
 import Text.Read (readMaybe)
-
 
 import qualified Board
 import Board (Board)
@@ -21,6 +24,34 @@ import Player (Player(..))
 
 main :: IO ()
 main = do
+  let app :: App (Maybe Integer) e ()
+      app = App { appDraw = draw
+                , appChooseCursor = \s ls -> Nothing
+                , appHandleEvent = handleEvent
+                , appStartEvent = pure
+                , appAttrMap = \s -> attrMap defAttr []
+                }
+      initialState = Just 1
+      draw = \case
+        Nothing -> pure $ center $ Brick.str "No state :("
+        Just n -> pure $ center $ Brick.str $ "Your score is: " <> show n
+      handleEvent :: Maybe Integer -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next (Maybe Integer))
+      handleEvent s = \case
+        Brick.VtyEvent (EvKey (KChar c) _) -> case readMaybe (pure c) :: Maybe Integer of
+          Just i -> Brick.continue (Just i)
+          Nothing -> case c of
+            'q' -> Brick.halt s
+            '+' -> Brick.continue (fmap (+ 1) s)
+            '-' -> Brick.continue (fmap (\n -> n - 1) s)
+        Brick.VtyEvent (EvKey (KBS) _) -> Brick.continue Nothing
+        _ -> Brick.continue s
+  finalState <- defaultMain app initialState
+  putStrLn "End of game:"
+  print finalState
+
+
+badUX :: IO ()
+badUX = do
   gen <- getStdGen
   let board = Board.blankBoard
   putStrLn (Board.showBoard showTile board)
