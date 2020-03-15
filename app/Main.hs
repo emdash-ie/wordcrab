@@ -1,11 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 module Main where
 
-import Brick (App(..), defaultMain, attrMap)
+import Brick (App(..), defaultMain, attrMap, (<=>))
 import qualified Brick
+import Brick.Widgets.Border (border)
 import Brick.Widgets.Center (center)
 import Control.Category ((>>>))
 import Control.Monad (guard)
+import Data.Bifunctor (first, second)
 import Data.Char (toLower, toUpper)
 import Data.List (lookup, (\\))
 import qualified Data.List.NonEmpty as NE
@@ -24,31 +26,92 @@ import Player (Player(..))
 
 main :: IO ()
 main = do
-  let app :: App (Maybe Integer) e ()
+  gen <- getStdGen
+  let app :: App ClientState e ()
       app = App { appDraw = draw
-                , appChooseCursor = \s ls -> Nothing
+                , appChooseCursor = Brick.showFirstCursor
                 , appHandleEvent = handleEvent
                 , appStartEvent = pure
                 , appAttrMap = \s -> attrMap defAttr []
                 }
-      initialState = Just 1
-      draw = \case
-        Nothing -> pure $ center $ Brick.str "No state :("
-        Just n -> pure $ center $ Brick.str $ "Your score is: " <> show n
-      handleEvent :: Maybe Integer -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next (Maybe Integer))
+      (startingRack, bag) = splitAt 7 (shuffleBag gen Tiles.tileset)
+      initialState = ClientState
+        { board = Board.blankBoard
+        , displayBoard = Board.blankBoard
+        , player = Player 0 startingRack
+        , tiles = bag
+        , cursor = (7, 7)
+        }
+      draw :: ClientState -> [Brick.Widget ()]
+      draw s = let
+          boardWidget = border $
+            Brick.showCursor () (Brick.Location $ first (* 2) $ cursor s) $
+              Brick.str $ Board.showBoard showTile (displayBoard s)
+          rackWidget' = Brick.padTop (Brick.Pad 1) $ Brick.str "Your rack:" <=> rackWidget (Player.rack $ player s)
+          scoreWidget = Brick.str $ "Your score: " <> show (Player.score $ player s)
+        in pure $ center $ Brick.vBox [ boardWidget
+                                      , rackWidget'
+                                      , scoreWidget
+                                      ]
+      handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
       handleEvent s = \case
         Brick.VtyEvent (EvKey (KChar c) _) -> case readMaybe (pure c) :: Maybe Integer of
-          Just i -> Brick.continue (Just i)
+          Just i -> Brick.continue s
           Nothing -> case c of
             'q' -> Brick.halt s
-            '+' -> Brick.continue (fmap (+ 1) s)
-            '-' -> Brick.continue (fmap (\n -> n - 1) s)
-        Brick.VtyEvent (EvKey (KBS) _) -> Brick.continue Nothing
+            c -> Brick.continue (place (Tiles.PlayedLetter $ Tiles.LetterTile c 0) s)
+        Brick.VtyEvent (EvKey KRight _) ->
+          Brick.continue $ moveRight s
+        Brick.VtyEvent (EvKey KLeft _) ->
+          Brick.continue $ moveLeft s
+        Brick.VtyEvent (EvKey KDown _) ->
+          Brick.continue $ moveDown s
+        Brick.VtyEvent (EvKey KUp _) ->
+          Brick.continue $ moveUp s
         _ -> Brick.continue s
   finalState <- defaultMain app initialState
-  putStrLn "End of game:"
-  print finalState
+  putStrLn "End of game"
 
+data ClientState = ClientState
+  { board :: Board Tiles.PlayedTile
+  , displayBoard :: Board Tiles.PlayedTile
+  , player :: Player
+  , tiles :: [Tiles.Tile]
+  , cursor :: (Int, Int)
+  }
+
+moveRight :: ClientState -> ClientState
+moveRight cs = let
+  right = first ((`mod` 15) . (+ 1)) (cursor cs)
+  in cs { cursor = right }
+
+moveLeft :: ClientState -> ClientState
+moveLeft cs = let
+  left = first ((`mod` 15) . (subtract 1)) (cursor cs)
+  in cs { cursor = left }
+
+moveUp :: ClientState -> ClientState
+moveUp cs = let
+  up = second ((`mod` 15) . (subtract 1)) (cursor cs)
+  in cs { cursor = up }
+
+moveDown :: ClientState -> ClientState
+moveDown cs = let
+  down = second ((`mod` 15) . (+ 1)) (cursor cs)
+  in cs { cursor = down }
+
+toBoardPosition :: (Int, Int) -> Board.Position
+toBoardPosition (x, y) = Board.Position x y
+
+place :: Tiles.PlayedTile -> ClientState -> ClientState
+place t cs = let
+  m =
+    Board.play (toBoardPosition (cursor cs))
+      Board.Horizontal
+      (t :| [])
+      Tiles.tileScore
+      (displayBoard cs)
+  in maybe cs (\((b, _, _), _) -> cs { displayBoard = b }) m
 
 badUX :: IO ()
 badUX = do
@@ -77,17 +140,17 @@ turns board tiles player = do
 -- - show resulting score, board, and rack
 -- Finish when we're out of tiles, or allow quit command?
 
-showRack :: [Tiles.Tile] -> String
-showRack ts = show $ fmap showRackTile ts
-  where showRackTile Tiles.Blank = "Blank"
-        showRackTile (Tiles.Letter lt) = pure (Tiles.letter lt)
+rackWidget :: [Tiles.Tile] -> Brick.Widget ()
+rackWidget ts = Brick.hBox $ fmap (border . Brick.str . tileWidget) ts
+  where tileWidget Tiles.Blank = " "
+        tileWidget (Tiles.Letter lt) = pure (Tiles.letter lt)
 
 printGameState :: Maybe (Board Tiles.PlayedTile, [Tiles.Tile], Player) -> IO ()
 printGameState Nothing = putStrLn "Error in play! (Please start again D:)"
 printGameState (Just (b, _, p)) = do
   putStrLn (Board.showBoard showTile b)
   putStrLn $ "Score: " <> show (score p)
-  putStrLn $ "Rack: " <> showRack (rack p)
+  -- putStrLn $ "Rack: " <> showRack (rack p)
 
 showTile :: Tiles.PlayedTile -> String
 showTile = \case
@@ -142,7 +205,7 @@ getDirectionFromUser = do
 getTilesFromUser :: NonEmpty Tiles.Tile -> IO (NonEmpty Tiles.PlayedTile)
 getTilesFromUser ts = do
   putStrLn "Choose some tiles from the list (e.g. [\"B\", \"A\", \"Blank D\"]):"
-  putStrLn $ "(Your tiles are: " <> showRack (NE.toList ts) <> ")"
+  -- putStrLn $ "(Your tiles are: " <> showRack (NE.toList ts) <> ")"
   line <- getLine
   case (readMaybe line :: Maybe [String]) of
     Nothing -> retry "Sorry, I don't understand."
