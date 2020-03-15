@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 
 module Tiles where
@@ -5,6 +6,8 @@ module Tiles where
 import Control.Monad (join)
 import Data.Aeson (ToJSON, FromJSON)
 import GHC.Generics
+import System.Random (StdGen)
+import System.Random.Shuffle (shuffle')
 
 data Tile = Blank | Letter LetterTile deriving (Generic, Show, Eq)
 instance ToJSON Tile
@@ -21,8 +24,16 @@ tileScore :: PlayedTile -> Integer
 tileScore (PlayedBlank _) = 0
 tileScore (PlayedLetter lt) = score lt
 
+shuffleBag :: StdGen -> [Tiles.Tile] -> [Tiles.Tile]
+shuffleBag gen ts = shuffle' ts (length ts) gen
+
 blanks :: String -> [PlayedTile]
 blanks = fmap PlayedBlank
+
+showTile :: Tiles.PlayedTile -> String
+showTile = \case
+  Tiles.PlayedBlank c -> [c]
+  Tiles.PlayedLetter lt -> [Tiles.letter lt]
 
 tileset :: [Tile]
 tileset = join
