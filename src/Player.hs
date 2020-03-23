@@ -1,8 +1,13 @@
-module Player (Player(..)) where
+{-# LANGUAGE TemplateHaskell #-}
+module Player where
+
+import Control.Lens (makeLenses)
 
 import qualified Tiles
 
 data Player = Player
-  { score :: Integer
-  , rack :: [Tiles.Tile]
+  { _score :: Integer
+  , _rack :: [Tiles.Tile]
   }
+
+makeLenses ''Player

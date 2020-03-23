@@ -22,7 +22,7 @@ badUX = do
   let board = Board.blankBoard
   putStrLn (Board.showBoard Tiles.showTile board)
   let (startingRack, tiles) = splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
-  let player = Player { rack = startingRack, score = 0 }
+  let player = Player { _rack = startingRack, _score = 0 }
   turns board tiles player
 
 turns :: Board Tiles.PlayedTile -> [Tiles.Tile] -> Player -> IO ()
@@ -42,12 +42,12 @@ turn b ts p = do
   position <- getPositionFromUser
   -- pure $ guard (positionIsClear position)
   direction <- getDirectionFromUser
-  playedTiles <- getTilesFromUser (NE.fromList $ rack p)
+  playedTiles <- getTilesFromUser (NE.fromList $ _rack p)
   pure $ do
     ((b', _, _), s) <- Board.play position direction playedTiles Tiles.tileScore b
     let (newTiles, rest) = splitAt (length playedTiles) ts
-    let p' = p { rack = (rack p \\ NE.toList (fmap fromPlayedTile playedTiles)) <> newTiles
-                          , score = score p + s
+    let p' = p { _rack = (_rack p \\ NE.toList (fmap fromPlayedTile playedTiles)) <> newTiles
+                          , _score = _score p + s
                           }
     pure (b', rest, p')
 
@@ -55,7 +55,7 @@ printGameState :: Maybe (Board Tiles.PlayedTile, [Tiles.Tile], Player) -> IO ()
 printGameState Nothing = putStrLn "Error in play! (Please start again D:)"
 printGameState (Just (b, _, p)) = do
   putStrLn (Board.showBoard Tiles.showTile b)
-  putStrLn $ "Score: " <> show (score p)
+  putStrLn $ "Score: " <> show (_score p)
   -- putStrLn $ "Rack: " <> showRack (rack p)
 
 -- | Should probably be a maybe or something, if we want the user to be able to
@@ -149,12 +149,12 @@ testPlayer ::
 testPlayer ts b p = let
   makePlayed = \case Tiles.Blank -> Tiles.PlayedBlank 'A'
                      Tiles.Letter lt -> Tiles.PlayedLetter lt
-  playedTiles = NE.fromList $ makePlayed <$> take 3 (rack p)
+  playedTiles = NE.fromList $ makePlayed <$> take 3 (_rack p)
   position = Board.Position 0 0
   ((b', _, _), playScore) = fromJust $ Board.play position Board.Vertical playedTiles Tiles.tileScore b
   (newTiles, rest) = splitAt 3 ts
-  in (b', rest, p { rack = rack p <> newTiles
-                  , score = score p + playScore })
+  in (b', rest, p { _rack = _rack p <> newTiles
+                  , _score = _score p + playScore })
 
 showTileInPlay :: Board.TileInPlay Tiles.PlayedTile -> String
 showTileInPlay (when, square) = let
