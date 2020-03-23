@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
 
-module Tiles where
+module Wordcrab.Tiles where
 
 import Control.Monad (join)
 import Data.Aeson (ToJSON, FromJSON)
@@ -24,16 +24,16 @@ tileScore :: PlayedTile -> Integer
 tileScore (PlayedBlank _) = 0
 tileScore (PlayedLetter lt) = score lt
 
-shuffleBag :: StdGen -> [Tiles.Tile] -> [Tiles.Tile]
+shuffleBag :: StdGen -> [Tile] -> [Tile]
 shuffleBag gen ts = shuffle' ts (length ts) gen
 
 blanks :: String -> [PlayedTile]
 blanks = fmap PlayedBlank
 
-showTile :: Tiles.PlayedTile -> String
+showTile :: PlayedTile -> String
 showTile = \case
-  Tiles.PlayedBlank c -> [c]
-  Tiles.PlayedLetter lt -> [Tiles.letter lt]
+  PlayedBlank c -> [c]
+  PlayedLetter lt -> [letter lt]
 
 tileset :: [Tile]
 tileset = join

@@ -1,9 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
-module Player where
+module Wordcrab.Player where
 
 import Control.Lens (makeLenses)
 
-import qualified Tiles
+import qualified Wordcrab.Tiles as Tiles
 
 data Player = Player
   { _score :: Integer

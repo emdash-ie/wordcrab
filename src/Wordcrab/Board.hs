@@ -1,4 +1,4 @@
-module Board
+module Wordcrab.Board
   ( Board(..)
   , Direction(..)
   , PlayedWhen(..)
@@ -45,14 +45,14 @@ totalWordMultiplier = filter isWordMultiplier
   >>> fmap (\(WordMultiplier n) -> n)
   >>> product
 
-newtype ValidPosition = ValidPosition { unwrapPosition :: Board.Position } deriving (Eq, Show)
+newtype ValidPosition = ValidPosition { unwrapPosition :: Position } deriving (Eq, Show)
 
-validatePosition :: Board.Position -> Board t -> Maybe ValidPosition
+validatePosition :: Position -> Board t -> Maybe ValidPosition
 validatePosition p (Board rs) = let
-  validY = Board.positionY p < fromIntegral (length rs) && Board.positionY p > 0
+  validY = positionY p < fromIntegral (length rs) && positionY p > 0
   validX = case rs V.!? 0 of
     Nothing -> False
-    Just (Row ts) -> Board.positionX p < fromIntegral (length ts) && Board.positionX p > 0
+    Just (Row ts) -> positionX p < fromIntegral (length ts) && positionX p > 0
   in bool Nothing (Just $ ValidPosition p) (validY && validX)
 
 blankBoard :: Board t
@@ -75,7 +75,7 @@ squareTypes = let
   in reflect (fmap reflect upperLeft)
 
 lookup :: Board t -> ValidPosition -> Square (Maybe t)
-lookup (Board rs) (ValidPosition p) = unRow (rs V.! Board.positionY p) V.! Board.positionX p
+lookup (Board rs) (ValidPosition p) = unRow (rs V.! positionY p) V.! positionX p
 
 update :: Board t -> ValidPosition -> t -> Maybe (Board t)
 update b p t = case squareContents $ lookup b p of
@@ -84,28 +84,28 @@ update b p t = case squareContents $ lookup b p of
 
 write :: Board t -> ValidPosition -> t -> Board t
 write (Board rs) (ValidPosition p) t = let
-  Row oldRow = rs V.! Board.positionY p
-  s = oldRow V.! Board.positionX p
-  newRow = Row $ oldRow V.// [(Board.positionX p, Square (squareType s) (Just t))]
-  in Board (rs V.// [(Board.positionY p, newRow)])
+  Row oldRow = rs V.! positionY p
+  s = oldRow V.! positionX p
+  newRow = Row $ oldRow V.// [(positionX p, Square (squareType s) (Just t))]
+  in Board (rs V.// [(positionY p, newRow)])
 
 writeSeveral :: Foldable a => a (ValidPosition, t) -> Board t -> Board t
 writeSeveral xs b = foldr (\(p, t) b' -> write b' p t) b xs
 
 playIndices ::
-  Board.Position ->
-  Board.Direction ->
+  Position ->
+  Direction ->
   NonEmpty t ->
   Board t ->
   Maybe (NonEmpty (ValidPosition, Square t))
 playIndices p d ts b = do
   vp <- validatePosition p b
   case lookup b vp of
-    Square _ (Just _) -> playIndices (Board.forward d p) d ts b
+    Square _ (Just _) -> playIndices (forward d p) d ts b
     Square st Nothing -> case NE.uncons ts of
         (t, Nothing) -> Just $ (vp, Square st t) :| []
         (t, Just ts') -> NE.cons (vp, Square st t)
-                           <$> playIndices (Board.forward d p) d ts' b
+                           <$> playIndices (forward d p) d ts' b
 
 bordersWord ::
   NonEmpty ValidPosition ->
@@ -121,27 +121,27 @@ neighbours ::
   NonEmpty (Square (Maybe t))
 neighbours (ValidPosition p) b = let
   f p' = validatePosition p' b <&> lookup b
-  above = f (Board.backward Board.Vertical p)
-  below = f (Board.forward Board.Vertical p)
-  right = f (Board.backward Board.Horizontal p)
-  left = f (Board.forward Board.Horizontal p)
+  above = f (backward Vertical p)
+  below = f (forward Vertical p)
+  right = f (backward Horizontal p)
+  left = f (forward Horizontal p)
   -- | fromList: Every space has at least two valid neighbours
   in NE.fromList (catMaybes [above, below, right, left])
 
 wordAt ::
   ValidPosition ->
-  Board.Direction ->
+  Direction ->
   Board t ->
   [(ValidPosition, Square t)]
 wordAt p d b = wordFrom (startOfWord p d b) d b
 
 startOfWord ::
   ValidPosition ->
-  Board.Direction ->
+  Direction ->
   Board t ->
   ValidPosition
 startOfWord vp@(ValidPosition p) d b =
-  case validatePosition (Board.backward d p) b of
+  case validatePosition (backward d p) b of
     Nothing -> vp
     Just p' -> case lookup b p' of
       Square _ Nothing -> vp
@@ -149,12 +149,12 @@ startOfWord vp@(ValidPosition p) d b =
 
 wordFrom ::
   ValidPosition ->
-  Board.Direction ->
+  Direction ->
   Board t ->
   [(ValidPosition, Square t)]
 wordFrom vp@(ValidPosition p) d b = case lookup b vp of
   Square _ Nothing -> []
-  Square st (Just t) -> case validatePosition (Board.forward d p) b of
+  Square st (Just t) -> case validatePosition (forward d p) b of
     Nothing -> [(vp, Square st t)]
     Just vp' -> (vp, Square st t) : wordFrom vp' d b
 
@@ -163,8 +163,8 @@ type TileInPlay t = (PlayedWhen, Square t)
 data PlayedWhen = PlayedNow | PlayedEarlier deriving (Show, Eq)
 
 play ::
-  Board.Position ->
-  Board.Direction ->
+  Position ->
+  Direction ->
   NonEmpty t ->
   (t -> Integer) ->
   Board t ->
@@ -173,7 +173,7 @@ play p d ts tileScore b = do
   indices <- playIndices p d ts b
   let playedIndices = fmap fst indices
   guard (bordersWord playedIndices b
-         || elem (Board.Position 7 7) (fmap (fst >>> unwrapPosition) indices))
+         || elem (Position 7 7) (fmap (fst >>> unwrapPosition) indices))
   let b' = writeSeveral (NE.map (second (\(Square _ x) -> x)) indices) b
   let mainWord = NE.fromList $ wordAt (NE.head playedIndices) d b'
   let perpWords = NE.filter ((> 1) . length) $ fmap (\i -> wordAt i (succ d) b') playedIndices

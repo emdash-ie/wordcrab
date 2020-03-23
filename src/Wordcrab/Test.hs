@@ -1,5 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
-module Test where
+module Wordcrab.Test where
 
 import Control.Category ((>>>))
 import Control.Monad (guard)
@@ -11,10 +11,10 @@ import Data.Maybe (fromJust, listToMaybe)
 import System.Random (getStdGen)
 import Text.Read (readMaybe)
 
-import qualified Board
-import Board (Board)
-import qualified Tiles
-import Player (Player(..))
+import qualified Wordcrab.Board as Board
+import Wordcrab.Board (Board)
+import qualified Wordcrab.Tiles as Tiles
+import Wordcrab.Player (Player(..))
 
 badUX :: IO ()
 badUX = do

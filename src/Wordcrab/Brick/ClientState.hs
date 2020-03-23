@@ -3,9 +3,9 @@ module Wordcrab.Brick.ClientState where
 
 import Control.Lens (makeLenses)
 
-import Board (Board)
-import qualified Tiles
-import Player (Player(..))
+import Wordcrab.Board (Board)
+import qualified Wordcrab.Tiles as Tiles
+import Wordcrab.Player (Player(..))
 
 data ClientState = ClientState
   { _current :: GameState

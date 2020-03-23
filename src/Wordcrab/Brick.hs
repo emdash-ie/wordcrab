@@ -15,9 +15,9 @@ import Prelude hiding (lookup)
 import System.Random (getStdGen)
 import Text.Read (readMaybe)
 
-import qualified Board
-import qualified Tiles
-import Player (Player(..), score, rack)
+import qualified Wordcrab.Board as Board
+import qualified Wordcrab.Tiles as Tiles
+import Wordcrab.Player (Player(..), score, rack)
 import Wordcrab.Brick.ClientState
 
 main :: IO ()
