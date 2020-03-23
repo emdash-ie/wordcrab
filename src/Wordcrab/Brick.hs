@@ -5,11 +5,11 @@ import Brick (App(..), defaultMain, attrMap, (<=>))
 import qualified Brick
 import Brick.Widgets.Border (border)
 import Brick.Widgets.Center (center)
-import Control.Lens ((^.), (*~), _1, to, (.~), (+~))
+import Control.Lens ((^.), (*~), _1, to, (.~), (+~), (%~), (?~))
 import Data.Bifunctor (first, second)
 import Data.Function ((&))
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust, isNothing, fromJust)
 import Graphics.Vty (defAttr, Key(..), Event(..))
 import Prelude hiding (lookup)
 import System.Random (getStdGen)
@@ -79,13 +79,20 @@ main = do
 
 placeOrSelectTile :: ClientState -> ClientState
 placeOrSelectTile cs = if selecting
-  then cs & rackCursor .~ Just 0
-  else placeTile cs
+  then cs & rackCursor ?~ 0
+  else fromJust $ placeTile cs
   where
     selecting = cs ^. rackCursor . to isNothing
 
-placeTile :: ClientState -> ClientState
-placeTile = rackCursor .~ Nothing
+placeTile :: ClientState -> Maybe ClientState
+placeTile cs = do
+  tile <- fmap ((!!) $ cs ^. preview . gameState . player . rack) (cs ^. rackCursor)
+  let playedTile = case tile of
+        Tiles.Letter lt -> Tiles.PlayedLetter lt
+        Tiles.Blank -> Tiles.PlayedBlank 'N'
+  pure $ cs & (rackCursor .~ Nothing)
+    & preview . placed %~ (:) (playedTile, cs ^. boardCursor)
+    -- & preview . gameState . player . rack %~ delete ...
 
 move ::
   ((Int -> Int) -> (Int, Int) -> (Int, Int)) ->
