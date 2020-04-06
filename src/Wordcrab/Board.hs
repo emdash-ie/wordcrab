@@ -6,6 +6,8 @@ module Wordcrab.Board
   , TileInPlay
   , Square(..)
   , Play
+  , Row(..)
+  , PlayError(..)
   , forward
   , backward
   , play
@@ -168,18 +170,22 @@ play ::
   NonEmpty t ->
   (t -> Integer) ->
   Board t ->
-  Maybe (Play t, Integer)
+  Either (PlayError t) (Play t, Integer)
 play p d ts tileScore b = do
-  indices <- playIndices p d ts b
+  indices <- maybe (Left NonExistentPositions) Right $ playIndices p d ts b
   let playedIndices = fmap fst indices
-  guard (bordersWord playedIndices b
-         || elem (Position 7 7) (fmap (fst >>> unwrapPosition) indices))
+  if bordersWord playedIndices b
+     || elem (Position 7 7) (fmap (fst >>> unwrapPosition) indices)
+    then Right ()
+    else Left $ InvalidPositions indices
   let b' = writeSeveral (NE.map (second (\(Square _ x) -> x)) indices) b
   let mainWord = NE.fromList $ wordAt (NE.head playedIndices) d b'
   let perpWords = NE.filter ((> 1) . length) $ fmap (\i -> wordAt i (succ d) b') playedIndices
   let active = first (\i  -> bool PlayedEarlier PlayedNow (i `elem` playedIndices))
   let play = (b', fmap active mainWord, (fmap . fmap) active perpWords)
   pure (play, score tileScore play)
+
+data PlayError t = NonExistentPositions | InvalidPositions (NonEmpty (ValidPosition, Square t)) deriving Show
 
 score :: (t -> Integer) -> Play t -> Integer
 score tileScore (_, mainWord, perpWords) =

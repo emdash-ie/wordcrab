@@ -7,7 +7,7 @@ import Data.Char (toLower, toUpper)
 import Data.List (lookup, (\\))
 import qualified Data.List.NonEmpty as NE
 import Data.List.NonEmpty (NonEmpty(..))
-import Data.Maybe (fromJust, listToMaybe)
+import Data.Maybe (listToMaybe)
 import System.Random (getStdGen)
 import Text.Read (readMaybe)
 
@@ -30,14 +30,14 @@ turns board tiles player = do
   result <- turn board tiles player
   printGameState result
   case result of
-    Nothing -> putStrLn "There was a problem with the last turn. Exiting."
-    Just (board', tiles', player') -> turns board' tiles' player'
+    Left _ -> putStrLn "There was a problem with the last turn. Exiting."
+    Right (board', tiles', player') -> turns board' tiles' player'
 
 turn ::
   Board Tiles.PlayedTile ->
   [Tiles.Tile] ->
   Player ->
-  IO (Maybe (Board Tiles.PlayedTile, [Tiles.Tile], Player))
+  IO (Either (Board.PlayError Tiles.PlayedTile) (Board Tiles.PlayedTile, [Tiles.Tile], Player))
 turn b ts p = do
   position <- getPositionFromUser
   -- pure $ guard (positionIsClear position)
@@ -51,9 +51,9 @@ turn b ts p = do
                           }
     pure (b', rest, p')
 
-printGameState :: Maybe (Board Tiles.PlayedTile, [Tiles.Tile], Player) -> IO ()
-printGameState Nothing = putStrLn "Error in play! (Please start again D:)"
-printGameState (Just (b, _, p)) = do
+printGameState :: Either (Board.PlayError Tiles.PlayedTile) (Board Tiles.PlayedTile, [Tiles.Tile], Player) -> IO ()
+printGameState (Left _) = putStrLn "Error in play! (Please start again D:)"
+printGameState (Right (b, _, p)) = do
   putStrLn (Board.showBoard Tiles.showTile b)
   putStrLn $ "Score: " <> show (_score p)
   -- putStrLn $ "Rack: " <> showRack (rack p)
@@ -151,7 +151,7 @@ testPlayer ts b p = let
                      Tiles.Letter lt -> Tiles.PlayedLetter lt
   playedTiles = NE.fromList $ makePlayed <$> take 3 (_rack p)
   position = Board.Position 0 0
-  ((b', _, _), playScore) = fromJust $ Board.play position Board.Vertical playedTiles Tiles.tileScore b
+  ((b', _, _), playScore) = fromRight $ Board.play position Board.Vertical playedTiles Tiles.tileScore b
   (newTiles, rest) = splitAt 3 ts
   in (b', rest, p { _rack = _rack p <> newTiles
                   , _score = _score p + playScore })
@@ -172,16 +172,16 @@ display ((b, mw, pws), s) = putStrLn (Board.showBoard Tiles.showTile b)
 testBoard :: IO ()
 testBoard = let
   b = Board.blankBoard
-  t1@((b1, mw1, pw1), s1) = fromJust $
+  t1@((b1, mw1, pw1), s1) = fromRight $
     Board.play (Board.Position 7 7) Board.Horizontal
       (fmap Tiles.PlayedLetter (Tiles.a :| [Tiles.b])) Tiles.tileScore b
-  t2@((b2, mw2, pw2), s2) = fromJust $
+  t2@((b2, mw2, pw2), s2) = fromRight $
     Board.play (Board.Position 6 7) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.t :| [Tiles.l, Tiles.e])) Tiles.tileScore b1
-  t3@((b3, mw3, pw3), s3) = fromJust $
+  t3@((b3, mw3, pw3), s3) = fromRight $
     Board.play (Board.Position 9 4) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.e, Tiles.l])) Tiles.tileScore b2
-  t4@((b4, mw4, pw4), s4) = fromJust $
+  t4@((b4, mw4, pw4), s4) = fromRight $
     Board.play (Board.Position 6 8) Board.Vertical (fmap Tiles.PlayedLetter (Tiles.h :| [Tiles.i, Tiles.n, Tiles.k])) Tiles.tileScore b3
-  t5@((b5, mw5, pw5), s5) = fromJust $
+  t5@((b5, mw5, pw5), s5) = fromRight $
     Board.play (Board.Position 9 8) Board.Horizontal (fmap Tiles.PlayedLetter (Tiles.o :| [Tiles.x, Tiles.e, Tiles.n])) Tiles.tileScore b4
   fullSequence = putStrLn "1:" >> display t1 >> getLine
                  >> putStrLn "2:" >> display t2 >> getLine
@@ -189,3 +189,6 @@ testBoard = let
                  >> putStrLn "4:" >> display t4 >> getLine
                  >> putStrLn "5:" >> display t5
   in fullSequence
+
+fromRight :: Either a b -> b
+fromRight (Right b) = b

@@ -7,9 +7,13 @@ import Brick.Widgets.Border (border)
 import Brick.Widgets.Center (center)
 import Control.Lens ((^.), (*~), _1, to, (.~), (+~), (%~), (?~))
 import Data.Bifunctor (first, second)
+import Data.Either (fromRight, isLeft)
 import Data.Function ((&))
+import Data.Functor.Identity (Identity(..))
 import Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List.NonEmpty as NE
 import Data.Maybe (isJust, isNothing, fromJust)
+import qualified Data.Vector as V
 import Graphics.Vty (defAttr, Key(..), Event(..))
 import Prelude hiding (lookup)
 import System.Random (getStdGen)
@@ -32,20 +36,23 @@ main = do
                 }
       (startingRack, bag) = splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
       gs = GameState
-        { _board = Board.blankBoard
+        { _board = Identity Board.blankBoard
         , _player = Player 0 startingRack
         , _tiles = bag
         }
       initialState = ClientState
         { _current = gs
-        , _preview = PreviewState gs []
+        , _preview
+          = PreviewState (gs & board %~ (Right . runIdentity)) [] Board.blankBoard
         , _boardCursor = (7, 7)
         , _rackCursor = Nothing
         }
       draw :: ClientState -> [Brick.Widget ()]
       draw s = let
           boardWidget = let
-            b = Brick.str $ Board.showBoard Tiles.showTile (s ^. preview . gameState . board)
+            b = Brick.str $ case s ^. preview . gameState . board of
+              Left e -> "Error: " <> show e
+              Right b -> Board.showBoard Tiles.showTile b
             c = Brick.showCursor () (Brick.Location $ s ^. boardCursor & _1 *~ 2)
             in border $ if isJust (s ^. rackCursor)
                         then b
@@ -55,11 +62,15 @@ main = do
                   (s ^. preview . gameState . player . rack)
                   (s ^. rackCursor)
           scoreWidget name score = Brick.str $ name <> " score: " <> show score
+          validationWidget = Brick.str $ if isLeft (s ^. preview . gameState . board)
+                                         then "(Invalid move)"
+                                         else ""
         in pure $ center $ Brick.vBox
            [ boardWidget
            , rackWidget'
            , scoreWidget "Current" (s ^. current . player . score)
            , scoreWidget "Projected" (s ^. preview . gameState . player . score)
+           , validationWidget
            ]
       handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
       handleEvent s = \case
@@ -68,7 +79,7 @@ main = do
           Nothing -> case c of
             'q' -> Brick.halt s
             ' ' -> Brick.continue $ placeOrSelectTile s
-            c -> Brick.continue (updatePreview (Tiles.PlayedLetter $ Tiles.LetterTile c 0) s)
+            _ -> Brick.continue s
         Brick.VtyEvent (EvKey KRight _) -> Brick.continue $ moveRight s
         Brick.VtyEvent (EvKey KLeft _) -> Brick.continue $ moveLeft s
         Brick.VtyEvent (EvKey KDown _) -> Brick.continue $ moveDown s
@@ -80,19 +91,60 @@ main = do
 placeOrSelectTile :: ClientState -> ClientState
 placeOrSelectTile cs = if selecting
   then cs & rackCursor ?~ 0
-  else fromJust $ placeTile cs
+  else fromRight cs $ placeTile cs
   where
     selecting = cs ^. rackCursor . to isNothing
 
-placeTile :: ClientState -> Maybe ClientState
+placeTile :: ClientState -> Either PlaceError ClientState
 placeTile cs = do
-  tile <- fmap ((!!) $ cs ^. preview . gameState . player . rack) (cs ^. rackCursor)
-  let playedTile = case tile of
+  i <- note NoCursor $ cs ^. rackCursor
+  let playedTile = case (cs ^. preview . gameState . player . rack) !! i of
         Tiles.Letter lt -> Tiles.PlayedLetter lt
-        Tiles.Blank -> Tiles.PlayedBlank 'N'
-  pure $ cs & (rackCursor .~ Nothing)
+        Tiles.Blank -> Tiles.PlayedBlank 'N' -- TODO: prompt player for letter
+  cs <- pure $ cs & (rackCursor .~ Nothing)
     & preview . placed %~ (:) (playedTile, cs ^. boardCursor)
-    -- & preview . gameState . player . rack %~ delete ...
+    & preview . gameState . player . rack %~ remove i
+  (p, d, ts) <- first Organise $ organiseTiles cs
+  let m = Board.play p
+        d
+        ts
+        Tiles.tileScore
+        (runIdentity $ cs ^. current . board)
+  -- cs <- pure $ cs & preview . displayBoard %~ updateBoard (cs ^. boardCursor) playedTile
+  pure $ case m of
+    Right ((b, _, _), s) -> cs & preview . gameState . board .~ Right b
+                           & preview . gameState . player . score .~ (s + (cs ^. current . player . score))
+    Left e -> cs & preview . gameState . board .~ Left e
+
+note :: a -> Maybe b -> Either a b
+note a = maybe (Left a) Right
+
+data PlaceError = Organise OrganiseError | NoCursor
+
+organiseTiles :: ClientState -> Either OrganiseError (Board.Position, Board.Direction, NonEmpty Tiles.PlayedTile)
+organiseTiles cs = case cs ^. preview . placed of
+  [] -> Left NoTiles
+  t@(_, (x, y)) : ts -> let
+    sorted = NE.sortWith (\(_, coords) -> f coords) (t :| ts)
+    horizontal = all ((== y) . snd . snd) ts
+    vertical = all ((== x) . fst . snd) ts
+    f = case (horizontal, vertical) of
+      (True, False) -> fst
+      _ -> snd
+    direction = case (horizontal, vertical) of
+      (True, True) -> Right Board.Horizontal
+      (True, False) -> Right Board.Horizontal
+      (False, True) -> Right Board.Vertical
+      (False, False) -> Left InconsistentDirection
+    position = uncurry Board.Position $ snd $ NE.head sorted
+    in do
+      d <- direction
+      pure (position, d, fmap fst sorted)
+
+data OrganiseError = NoTiles | InconsistentDirection
+
+remove :: Int -> [a] -> [a]
+remove i xs = take i xs <> drop (i + 1) xs
 
 move ::
   ((Int -> Int) -> (Int, Int) -> (Int, Int)) ->
@@ -101,7 +153,8 @@ move ::
   ClientState
 move f g cs = let
   boardMove = f ((`mod` 15) . g) (cs ^. boardCursor)
-  rackMove = fmap ((`mod` 7) . g) (cs ^. rackCursor)
+  rackMove = fmap ((`mod` (length $ cs ^. preview . gameState . player . rack)) . g)
+             (cs ^. rackCursor)
   in if isJust (cs ^. rackCursor)
      then rackCursor .~ rackMove $ cs
      else boardCursor .~ boardMove $ cs
@@ -121,18 +174,17 @@ moveDown = move second (+ 1)
 toBoardPosition :: (Int, Int) -> Board.Position
 toBoardPosition (x, y) = Board.Position x y
 
-updatePreview :: Tiles.PlayedTile -> ClientState -> ClientState
-updatePreview t cs = let
-  m =
-    Board.play (toBoardPosition (cs ^. boardCursor))
-      Board.Horizontal
-      (t :| [])
-      Tiles.tileScore
-      (cs ^. current . board)
-  in flip (maybe cs) m
-     (\((b, _, _), s) ->
-         cs & preview . gameState . board .~ b
-            & preview . gameState . player . score +~ s)
+updateBoard ::
+  (Int, Int) ->
+  Tiles.PlayedTile ->
+  Board.Board Tiles.PlayedTile ->
+  Board.Board Tiles.PlayedTile
+updateBoard (x, y) t b = let
+  v = Board.unBoard b
+  r = Board.unRow $ v V.! y
+  s = r V.! x
+  r' = r V.// [(x, s { Board.squareContents = Just t })]
+  in Board.Board $ v V.// [(y, Board.Row r')]
 
 rackWidget :: [Tiles.Tile] -> Maybe Int -> Brick.Widget ()
 rackWidget ts cursor
