@@ -19,7 +19,6 @@ where
 import Prelude hiding (lookup)
 
 import Control.Category ((>>>))
-import Control.Monad (guard)
 import Data.Bifunctor (first, second)
 import Data.Bool (bool)
 import Data.Foldable (fold)

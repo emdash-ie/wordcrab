@@ -32,6 +32,8 @@ dependencies:
 - brick
 - vty
 - lens
+- text
+- containers
 
 library:
   source-dirs: src

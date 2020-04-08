@@ -35,6 +35,10 @@ showTile = \case
   PlayedBlank c -> [c]
   PlayedLetter lt -> [letter lt]
 
+unplay :: PlayedTile -> Tile
+unplay (PlayedBlank _) = Blank
+unplay (PlayedLetter lt) = Letter lt
+
 tileset :: [Tile]
 tileset = join
   [ replicate 2 Blank
