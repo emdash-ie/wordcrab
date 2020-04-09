@@ -77,12 +77,10 @@ main = do
            ]
       handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
       handleEvent s = \case
-        Brick.VtyEvent (EvKey (KChar c) _) -> case readMaybe (pure c) :: Maybe Integer of
-          Just i -> Brick.continue s
-          Nothing -> case c of
-            'q' -> Brick.halt s
+        Brick.VtyEvent (EvKey (KChar 'q') (_:_)) -> Brick.halt s
+        Brick.VtyEvent (EvKey (KChar c) _) -> case c of
             ' ' -> Brick.continue $ placeOrSelectTile s
-            _ -> Brick.continue s
+            c -> Brick.continue $ updateBlank s c
         Brick.VtyEvent (EvKey KRight _) -> Brick.continue $ moveRight s
         Brick.VtyEvent (EvKey KLeft _) -> Brick.continue $ moveLeft s
         Brick.VtyEvent (EvKey KDown _) -> Brick.continue $ moveDown s
@@ -120,6 +118,16 @@ placeOrSelectTile cs = if selecting
   where
     selecting = cs ^. rackCursor . to isNothing
 
+updateBlank :: ClientState -> Char -> ClientState
+updateBlank s c = let
+  cursor = s ^. boardCursor
+  target = Map.lookup cursor (s ^. preview . placed)
+  in case (s ^. rackCursor, target) of
+    (Nothing, Just (Tiles.PlayedBlank _)) ->
+      snd $ updatePreview $
+        s & preview . placed %~ Map.adjust (const $ Tiles.PlayedBlank c) cursor
+    _ -> message s "Can only add a letter to a blank tile you've placed this turn"
+
 updatePreview :: ClientState -> (Maybe OrganiseError, ClientState)
 updatePreview cs = runIdentity $ do
   cs <- pure $ cs
@@ -145,12 +153,13 @@ updatePreview cs = runIdentity $ do
              (Map.toList $ cs ^. preview . placed)
   pure (either Just (const Nothing) ot, cs & preview . displayBoard .~ db)
 
+-- | TODO: Prevent playing over a tile you just played
 placeTile :: ClientState -> Either PlaceError ClientState
 placeTile cs = do
   i <- note NoCursor $ cs ^. rackCursor
   let playedTile = case (cs ^. preview . gameState . player . rack) !! i of
         Tiles.Letter lt -> Tiles.PlayedLetter lt
-        Tiles.Blank -> Tiles.PlayedBlank 'N' -- TODO: prompt player for letter
+        Tiles.Blank -> Tiles.PlayedBlank ' '
   cs <- pure $ cs & (rackCursor .~ Nothing)
     & preview . placed %~ Map.insert (cs ^. boardCursor) playedTile
     & preview . gameState . player . rack %~ remove i
