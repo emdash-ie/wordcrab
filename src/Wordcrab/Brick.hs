@@ -112,11 +112,19 @@ message :: ClientState -> Text -> ClientState
 message cs m = cs & messages %~ (m :)
 
 placeOrSelectTile :: ClientState -> ClientState
-placeOrSelectTile cs = if selecting
-  then cs & rackCursor ?~ 0
+placeOrSelectTile cs =
+  if cursorOnBoard
+  then if spaceFree
+    then cs & rackCursor ?~ 0
+    else message cs "Can't place on another tile"
   else fromRight cs $ placeTile cs
   where
-    selecting = cs ^. rackCursor . to isNothing
+    cursorOnBoard = cs ^. rackCursor . to isNothing
+    spaceFree = isNothing cell
+    (x, y) = cs ^. boardCursor
+    vector = Board.unBoard (cs ^. preview . displayBoard)
+    row = Board.unRow (vector V.! y)
+    cell = Board.squareContents $ row V.! x
 
 updateBlank :: ClientState -> Char -> ClientState
 updateBlank s c = let
