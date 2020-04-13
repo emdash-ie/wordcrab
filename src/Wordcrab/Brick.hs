@@ -4,13 +4,14 @@ module Wordcrab.Brick where
 
 import Brick (App(..), defaultMain, attrMap, (<=>))
 import qualified Brick
-import Brick.Widgets.Border (border)
+import Brick.Widgets.Border (border, hBorder, vBorder)
 import Brick.Widgets.Center (center)
-import Control.Lens ((^.), (*~), _1, to, (.~), (+~), (%~), (?~))
+import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~))
 import Data.Bifunctor (first, second)
 import Data.Either (fromRight, isLeft)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity(..))
+import Data.List (intersperse)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
@@ -55,26 +56,43 @@ main = do
       draw :: ClientState -> [Brick.Widget ()]
       draw s = let
           boardWidget = let
-            b = Brick.str $ case s ^. preview . gameState . board of
-              Left e -> Board.showBoard Tiles.showTile (s ^. preview . displayBoard)
-              Right b -> Board.showBoard Tiles.showTile b
-            c = Brick.showCursor () (Brick.Location $ s ^. boardCursor & _1 *~ 2)
-            in border $ if isJust (s ^. rackCursor)
-                        then b
-                        else c b
+            c = Brick.showCursor
+                  ()
+                  (Brick.Location $ s ^. boardCursor
+                    & _1 *~ 4 & _1 +~ 2
+                    & _2 *~ 2 & _2 +~ 1)
+            b = fromRight
+                  (s ^. preview . displayBoard)
+                  (s ^. preview . gameState . board)
+            rs = V.toList (Board.unBoard b)
+            width = (4 * length rs) + 1
+            w = Brick.hLimit width $ border $ Brick.vBox $ intersperse hBorder $
+              fmap (Brick.vLimit 1 . Brick.hBox
+                    . intersperse vBorder . V.toList
+                    . fmap (Brick.hLimit 3 . center . Brick.str . showTile)
+                    . Board.unRow) rs
+            showTile :: Board.Square (Maybe Tiles.PlayedTile) -> String
+            showTile (Board.Square _ mt) = case mt of
+              Nothing -> " "
+              Just t -> case t of
+                Tiles.PlayedBlank c -> [c]
+                Tiles.PlayedLetter lt -> [Tiles.letter lt]
+            in if isJust (s ^. rackCursor)
+               then w
+               else c w
           rackWidget' = Brick.padTop (Brick.Pad 1) $ Brick.str "Your rack:"
             <=> rackWidget
                   (s ^. preview . gameState . player . rack)
                   (s ^. rackCursor)
           scoreWidget name score = Brick.str $ name <> " score: " <> show score
           messageWidget = Brick.txt $ fromMaybe "" $ listToMaybe $ s ^. messages
-        in pure $ center $ Brick.vBox
-           [ boardWidget
-           , rackWidget'
-           , scoreWidget "Current" (s ^. current . player . score)
-           , scoreWidget "Projected" (s ^. preview . gameState . player . score)
-           , messageWidget
-           ]
+        in pure $ center $ Brick.joinBorders $ Brick.vBox
+          [ boardWidget
+          , rackWidget'
+          , scoreWidget "Current" (s ^. current . player . score)
+          , scoreWidget "Projected" (s ^. preview . gameState . player . score)
+          , messageWidget
+          ]
       handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
       handleEvent s = \case
         Brick.VtyEvent (EvKey (KChar 'q') (_:_)) -> Brick.halt s
