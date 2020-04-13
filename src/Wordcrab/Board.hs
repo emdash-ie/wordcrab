@@ -5,6 +5,7 @@ module Wordcrab.Board
   , Position(..)
   , TileInPlay
   , Square(..)
+  , SquareType(..)
   , Play
   , Row(..)
   , PlayError(..)

@@ -8,21 +8,20 @@ import Brick.Widgets.Border (border, hBorder, vBorder)
 import Brick.Widgets.Center (center)
 import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~))
 import Data.Bifunctor (first, second)
-import Data.Either (fromRight, isLeft)
+import Data.Either (fromRight)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity(..))
 import Data.List (intersperse)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
-import Data.Maybe (isJust, isNothing, fromJust, listToMaybe, fromMaybe)
+import Data.Maybe (isJust, isNothing, listToMaybe, fromMaybe)
 import qualified Data.Text as Text
 import Data.Text (Text)
 import qualified Data.Vector as V
-import Graphics.Vty (defAttr, Key(..), Event(..))
+import Graphics.Vty (defAttr, Key(..), Event(..), rgbColor)
 import Prelude hiding (lookup)
 import System.Random (getStdGen)
-import Text.Read (readMaybe)
 
 import qualified Wordcrab.Board as Board
 import qualified Wordcrab.Tiles as Tiles
@@ -37,7 +36,7 @@ main = do
                 , appChooseCursor = Brick.showFirstCursor
                 , appHandleEvent = handleEvent
                 , appStartEvent = pure
-                , appAttrMap = \s -> attrMap defAttr []
+                , appAttrMap = \s -> attributes
                 }
       (startingRack, bag) = splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
       gs = GameState
@@ -69,10 +68,18 @@ main = do
             w = Brick.hLimit width $ border $ Brick.vBox $ intersperse hBorder $
               fmap (Brick.vLimit 1 . Brick.hBox
                     . intersperse vBorder . V.toList
-                    . fmap (Brick.hLimit 3 . center . Brick.str . showTile)
+                    . fmap tileWidget
                     . Board.unRow) rs
-            showTile :: Board.Square (Maybe Tiles.PlayedTile) -> String
-            showTile (Board.Square _ mt) = case mt of
+            tileWidget :: Board.Square (Maybe Tiles.PlayedTile) -> Brick.Widget n
+            tileWidget (Board.Square st mt) = let
+              withAttr = case st of
+                Board.Normal -> id
+                Board.WordMultiplier 2 -> Brick.withAttr doubleWord
+                Board.WordMultiplier 3 -> Brick.withAttr tripleWord
+                Board.LetterMultiplier 2 -> Brick.withAttr doubleLetter
+                Board.LetterMultiplier 3 -> Brick.withAttr tripleLetter
+                _ -> id
+              in withAttr $ Brick.hLimit 3 $ center $ Brick.str $ case mt of
               Nothing -> " "
               Just t -> case t of
                 Tiles.PlayedBlank c -> [c]
@@ -106,6 +113,16 @@ main = do
         Brick.VtyEvent (EvKey KEnter _) -> Brick.continue $ confirmPlay s
         Brick.VtyEvent (EvKey KBS _) -> Brick.continue $ either (message s . Text.pack) id (pickUpTile s)
         _ -> Brick.continue s
+      doubleWord = Brick.attrName "doubleWord"
+      tripleWord = Brick.attrName "tripleWord"
+      doubleLetter = Brick.attrName "doubleLetter"
+      tripleLetter = Brick.attrName "tripleLetter"
+      attributes = Brick.attrMap defAttr
+        [ (doubleWord, Brick.bg (rgbColor 133 182 255))
+        , (tripleWord, Brick.bg (rgbColor 255 156 156))
+        , (doubleLetter, Brick.bg (rgbColor 148 219 255))
+        , (tripleLetter, Brick.bg (rgbColor 255 201 239))
+        ]
   finalState <- defaultMain app initialState
   putStrLn "End of game"
 
