@@ -8,8 +8,8 @@ import Data.Text (Text)
 
 import Wordcrab.Board (Board)
 import qualified Wordcrab.Board as Board
+import Wordcrab.GameState (GameState(..))
 import qualified Wordcrab.Tiles as Tiles
-import Wordcrab.Player (Player(..))
 
 data ClientState = ClientState
   { _current :: GameState Identity
@@ -20,12 +20,6 @@ data ClientState = ClientState
   }
 
 
-data GameState m = GameState
-  { _board :: m (Board Tiles.PlayedTile)
-  , _player :: Player
-  , _tiles :: [Tiles.Tile]
-  }
-
 data PreviewState = PreviewState
   { _gameState :: GameState (Either (Board.PlayError Tiles.PlayedTile))
   , _placed :: Map.Map (Int, Int) Tiles.PlayedTile
@@ -33,8 +27,4 @@ data PreviewState = PreviewState
   }
 
 makeLenses ''ClientState
-makeLenses ''GameState
 makeLenses ''PreviewState
-
-toPreviewState :: GameState Identity -> GameState (Either a)
-toPreviewState = board %~ Right . runIdentity

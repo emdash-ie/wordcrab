@@ -193,8 +193,8 @@ score tileScore (_, mainWord, perpWords) =
 
 scoreWord :: (t -> Integer) -> [TileInPlay t] -> Integer
 scoreWord tileScore ts = let
-  activeMultipliers = fmap (snd . second squareType)
-                $ filter (fst >>> (==) PlayedNow) ts
+  activeMultipliers = snd . second squareType
+                <$> filter (fst >>> (==) PlayedNow) ts
   wordMultiplier = fromIntegral $ totalWordMultiplier activeMultipliers
   letterScore (PlayedNow, Square (LetterMultiplier n) t) = fromIntegral n * tileScore t
   letterScore (_, Square _ t) = tileScore t

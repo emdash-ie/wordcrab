@@ -6,7 +6,7 @@ import Brick (App(..), defaultMain, attrMap, (<=>))
 import qualified Brick
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Brick.Widgets.Center (center)
-import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~))
+import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~), Lens')
 import Data.Bifunctor (first, second)
 import Data.Either (fromRight)
 import Data.Function ((&))
@@ -26,6 +26,8 @@ import System.Random (getStdGen)
 import qualified Wordcrab.Board as Board
 import qualified Wordcrab.Tiles as Tiles
 import Wordcrab.Player (Player(..), score, rack)
+import Wordcrab.GameState (GameState(..), board, tiles, players, currentPlayer, toPreviewState)
+import qualified Wordcrab.GameState as GameState
 import Wordcrab.Brick.ClientState
 
 main :: IO ()
@@ -38,10 +40,11 @@ main = do
                 , appStartEvent = pure
                 , appAttrMap = \s -> attributes
                 }
-      (startingRack, bag) = splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
+      (startingRack1, (startingRack2, bag)) =
+        splitAt 7 <$> splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
       gs = GameState
         { _board = Identity Board.blankBoard
-        , _player = Player 0 startingRack
+        , _players = GameState.initialPlayers $ Player 0 startingRack1 :| [Player 0 startingRack2]
         , _tiles = bag
         }
       initialState = ClientState
@@ -89,15 +92,15 @@ main = do
                else c w
           rackWidget' = Brick.padTop (Brick.Pad 1) $ Brick.str "Your rack:"
             <=> rackWidget
-                  (s ^. preview . gameState . player . rack)
+                  (s ^. preview . gameState . players . currentPlayer . rack)
                   (s ^. rackCursor)
           scoreWidget name score = Brick.str $ name <> " score: " <> show score
           messageWidget = Brick.txt $ fromMaybe "" $ listToMaybe $ s ^. messages
         in pure $ center $ Brick.joinBorders $ Brick.vBox
           [ boardWidget
           , rackWidget'
-          , scoreWidget "Current" (s ^. current . player . score)
-          , scoreWidget "Projected" (s ^. preview . gameState . player . score)
+          , scoreWidget "Current" (s ^. current . players . currentPlayer . score)
+          , scoreWidget "Projected" (s ^. preview . gameState . players . currentPlayer . score)
           , messageWidget
           ]
       handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
@@ -129,15 +132,16 @@ main = do
 confirmPlay :: ClientState -> ClientState
 confirmPlay cs = let
   newBoard = cs ^. preview . gameState . board
-  newScore = cs ^. preview . gameState . player . score
-  remainingTiles = cs ^. preview . gameState . player . rack
+  newScore = cs ^. preview . gameState . players . currentPlayer . score
+  remainingTiles = cs ^. preview . gameState . players . currentPlayer . rack
   needed = 7 - length remainingTiles
   (newTiles, newBag) = splitAt needed (cs ^. preview . gameState . tiles)
   in case newBoard of
     Right b -> cs
-               & current . player . score .~ newScore
+               & current . players . currentPlayer . score .~ newScore
                & current . board .~ Identity b
-               & current . player . rack .~ (remainingTiles <> newTiles)
+               & current . players . currentPlayer . rack .~ (remainingTiles <> newTiles)
+               & current . players %~ GameState.nextPlayer
                & current . tiles .~ newBag
                & preview . placed .~ Map.empty
                & \cs' -> cs' & preview . gameState .~ toPreviewState (cs' ^. current)
@@ -175,7 +179,7 @@ updatePreview :: ClientState -> (Maybe OrganiseError, ClientState)
 updatePreview cs = runIdentity $ do
   cs <- pure $ cs
           & preview . gameState . board .~ (cs ^. current . board . to runIdentity . to pure)
-          & preview . gameState . player . score .~ (cs ^. current . player . score)
+          & preview . gameState . players . currentPlayer . score .~ (cs ^. current . players . currentPlayer . score)
   let ot = organiseTiles cs
   cs <- pure $ case ot of
     Left NoTiles -> cs
@@ -189,7 +193,8 @@ updatePreview cs = runIdentity $ do
       case m of
         Right ((b, _, _), s) ->
           cs & preview . gameState . board .~ Right b
-             & preview . gameState . player . score .~ (s + (cs ^. current . player . score))
+             & preview . gameState . players . currentPlayer . score
+               .~ (s + (cs ^. current . players . currentPlayer . score))
         Left e -> cs & preview . gameState . board .~ Left e
   let db = foldr (\(xy, t) b -> updateBoard xy t b)
              (cs ^. current . board . to runIdentity)
@@ -200,12 +205,12 @@ updatePreview cs = runIdentity $ do
 placeTile :: ClientState -> Either PlaceError ClientState
 placeTile cs = do
   i <- note NoCursor $ cs ^. rackCursor
-  let playedTile = case (cs ^. preview . gameState . player . rack) !! i of
+  let playedTile = case (cs ^. preview . gameState . players . currentPlayer . rack) !! i of
         Tiles.Letter lt -> Tiles.PlayedLetter lt
         Tiles.Blank -> Tiles.PlayedBlank ' '
   cs <- pure $ cs & (rackCursor .~ Nothing)
     & preview . placed %~ Map.insert (cs ^. boardCursor) playedTile
-    & preview . gameState . player . rack %~ remove i
+    & preview . gameState . players . currentPlayer . rack %~ remove i
   case updatePreview cs of
     (Nothing, cs) -> pure cs
     (Just e, cs) -> pure $ cs & flip message ("can't play: invalid move (" <> Text.pack (show e) <> ")")
@@ -220,7 +225,7 @@ pickUpTile cs = do
       snd $
         updatePreview $
           cs & preview . placed %~ Map.delete (cs ^. boardCursor)
-             & preview . gameState . player . rack %~ (Tiles.unplay t :)
+             & preview . gameState . players . currentPlayer . rack %~ (Tiles.unplay t :)
 
 note :: a -> Maybe b -> Either a b
 note a = maybe (Left a) Right
@@ -259,7 +264,7 @@ move ::
   ClientState
 move f g cs = let
   boardMove = f ((`mod` 15) . g) (cs ^. boardCursor)
-  rackMove = fmap ((`mod` (length $ cs ^. preview . gameState . player . rack)) . g)
+  rackMove = fmap ((`mod` (length $ cs ^. preview . gameState . players . currentPlayer . rack)) . g)
              (cs ^. rackCursor)
   in if isJust (cs ^. rackCursor)
      then rackCursor .~ rackMove $ cs
