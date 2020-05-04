@@ -14,6 +14,8 @@ module Wordcrab.Board
   , play
   , showBoard
   , blankBoard
+  , totalWordMultiplier
+  , tileMultiplier
   )
 where
 
@@ -46,6 +48,12 @@ totalWordMultiplier :: [SquareType] -> Int
 totalWordMultiplier = filter isWordMultiplier
   >>> fmap (\(WordMultiplier n) -> n)
   >>> product
+
+tileMultiplier :: PlayedWhen -> SquareType -> Int
+tileMultiplier PlayedEarlier _ = 1
+tileMultiplier _ t = case t of
+  LetterMultiplier i -> i
+  _ -> 1
 
 newtype ValidPosition = ValidPosition { unwrapPosition :: Position } deriving (Eq, Show)
 

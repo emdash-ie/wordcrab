@@ -11,7 +11,7 @@ import Data.Bifunctor (first, second)
 import Data.Either (fromRight)
 import Data.Function ((&))
 import Data.Functor.Identity (Identity(..))
-import Data.List (intersperse)
+import Data.List (intersperse, intercalate)
 import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Map.Strict as Map
@@ -50,7 +50,7 @@ main = do
       initialState = ClientState
         { _current = gs
         , _preview
-          = PreviewState (gs & board %~ (Right . runIdentity)) Map.empty Board.blankBoard
+          = PreviewState (gs & board %~ (Right . runIdentity)) Map.empty Board.blankBoard Nothing
         , _boardCursor = (7, 7)
         , _rackCursor = Nothing
         , _messages = []
@@ -94,13 +94,38 @@ main = do
             <=> rackWidget
                   (s ^. preview . gameState . players . currentPlayer . rack)
                   (s ^. rackCursor)
-          scoreWidget name score = Brick.str $ name <> " score: " <> show score
+          scoreBoxWidget ps result = Brick.vBox $
+            (\(i, p) -> Brick.hLimit 61 $ Brick.strWrap $
+              playerNameString i <> if p == ps ^. currentPlayer
+                then scoreString p <> " (" <> moveString result <> ")"
+                else scoreString p)
+            <$> zip [1..] (NE.toList $ GameState.turnOrder ps)
+          playerNameString i = "Player " <> show i <> ": "
+          moveString :: Maybe (Board.Play Tiles.PlayedTile, Integer) -> String
+          moveString result = case result of
+            Nothing -> "Error"
+            Just ((_, mw, ws), s) -> "-> " <> show s <> ": " <> showWord (NE.toList mw)
+              <> ", " <> intercalate ", " (fmap showWord ws)
+          showWord :: [Board.TileInPlay Tiles.PlayedTile] -> String
+          showWord w = let
+            multiplier tip = case Board.squareType <$> tip of
+              (Board.PlayedNow, Board.WordMultiplier n) -> n
+              _ -> 1
+            in show (product (fmap multiplier w))
+            <> " x " <> concatMap showTile w
+          showTile :: Board.TileInPlay Tiles.PlayedTile -> String
+          showTile (when, square) = show $ case Board.squareContents square of
+            Tiles.PlayedLetter lt -> (Tiles.letter lt
+                                     , Board.tileMultiplier when (Board.squareType square)
+                                       * fromIntegral (Tiles.score lt)
+                                     )
+            Tiles.PlayedBlank c -> (c, 0)
+          scoreString p = show (p ^. score)
           messageWidget = Brick.txt $ fromMaybe "" $ listToMaybe $ s ^. messages
         in pure $ center $ Brick.joinBorders $ Brick.vBox
           [ boardWidget
           , rackWidget'
-          , scoreWidget "Current" (s ^. current . players . currentPlayer . score)
-          , scoreWidget "Projected" (s ^. preview . gameState . players . currentPlayer . score)
+          , scoreBoxWidget (s ^. current . players) (s ^. preview . playResult)
           , messageWidget
           ]
       handleEvent :: ClientState -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next ClientState)
@@ -191,11 +216,13 @@ updatePreview cs = runIdentity $ do
                 Tiles.tileScore
                 (runIdentity $ cs ^. current . board)
       case m of
-        Right ((b, _, _), s) ->
+        Right r@((b, _, _), s) ->
           cs & preview . gameState . board .~ Right b
              & preview . gameState . players . currentPlayer . score
                .~ (s + (cs ^. current . players . currentPlayer . score))
+             & preview . playResult .~ Just r
         Left e -> cs & preview . gameState . board .~ Left e
+                     & preview . playResult .~ Nothing
   let db = foldr (\(xy, t) b -> updateBoard xy t b)
              (cs ^. current . board . to runIdentity)
              (Map.toList $ cs ^. preview . placed)
@@ -207,7 +234,7 @@ placeTile cs = do
   i <- note NoCursor $ cs ^. rackCursor
   let playedTile = case (cs ^. preview . gameState . players . currentPlayer . rack) !! i of
         Tiles.Letter lt -> Tiles.PlayedLetter lt
-        Tiles.Blank -> Tiles.PlayedBlank ' '
+        Tiles.Blank -> Tiles.PlayedBlank '_'
   cs <- pure $ cs & (rackCursor .~ Nothing)
     & preview . placed %~ Map.insert (cs ^. boardCursor) playedTile
     & preview . gameState . players . currentPlayer . rack %~ remove i
