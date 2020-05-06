@@ -16,6 +16,8 @@ module Wordcrab.Board
   , blankBoard
   , totalWordMultiplier
   , tileMultiplier
+  , horizontalNeighbours
+  , validatePosition
   )
 where
 
@@ -129,14 +131,29 @@ neighbours ::
   ValidPosition ->
   Board t ->
   NonEmpty (Square (Maybe t))
-neighbours (ValidPosition p) b = let
+neighbours p b = horizontalNeighbours p b <> verticalNeighbours p b
+
+horizontalNeighbours ::
+  ValidPosition ->
+  Board t ->
+  NonEmpty (Square (Maybe t))
+horizontalNeighbours (ValidPosition p) b = let
+  f p' = validatePosition p' b <&> lookup b
+  left = f (backward Horizontal p)
+  right = f (forward Horizontal p)
+  -- | fromList: Every space has at least one valid horizontal neighbour
+  in NE.fromList (catMaybes [left, right])
+
+verticalNeighbours ::
+  ValidPosition ->
+  Board t ->
+  NonEmpty (Square (Maybe t))
+verticalNeighbours (ValidPosition p) b = let
   f p' = validatePosition p' b <&> lookup b
   above = f (backward Vertical p)
   below = f (forward Vertical p)
-  right = f (backward Horizontal p)
-  left = f (forward Horizontal p)
-  -- | fromList: Every space has at least two valid neighbours
-  in NE.fromList (catMaybes [above, below, right, left])
+  -- | fromList: Every space has at least one valid horizontal neighbour
+  in NE.fromList (catMaybes [above, below])
 
 wordAt ::
   ValidPosition ->

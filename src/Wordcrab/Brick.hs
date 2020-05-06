@@ -6,6 +6,7 @@ import Brick (App(..), defaultMain, attrMap, (<=>))
 import qualified Brick
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Brick.Widgets.Center (center)
+import Control.Category ((>>>))
 import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~), Lens')
 import Data.Bifunctor (first, second)
 import Data.Either (fromRight)
@@ -270,14 +271,22 @@ organiseTiles cs = case Map.toList $ cs ^. preview . placed of
       (True, False) -> fst
       _ -> snd
     direction = case (horizontal, vertical) of
-      (True, True) -> Right Board.Horizontal
       (True, False) -> Right Board.Horizontal
       (False, True) -> Right Board.Vertical
       (False, False) -> Left InconsistentDirection
+      (True, True) -> Right $ case hasHorizontalNeighbours (cs ^. current . board . to runIdentity) (Board.Position x y) of
+        Just True -> Board.Horizontal
+        _ -> Board.Vertical
     position = uncurry Board.Position $ fst $ NE.head sorted
     in do
       d <- direction
       pure (position, d, fmap snd sorted)
+
+hasHorizontalNeighbours :: Board.Board t -> Board.Position -> Maybe Bool
+hasHorizontalNeighbours b p = do
+  vp <- Board.validatePosition p b
+  let ns = NE.toList (Board.horizontalNeighbours vp b)
+  pure $ any (Board.squareContents >>> isJust) ns
 
 data OrganiseError = NoTiles | InconsistentDirection deriving Show
 
