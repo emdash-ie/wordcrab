@@ -1,0 +1,31 @@
+* Current situation
+  There’s a Haskell app which runs a two-player game in the terminal with a
+  basic TUI. The game never ends correctly (though the tiles will run out), and
+  some features haven’t been implemented (e.g. exchanging tiles, passing, the
+  bonus for using all your tiles). There are also some small scoring bugs.
+* Next steps
+** Possible: Split up existing Haskell into client and server
+   Seems like a good intermediate step before a non-Haskell client, helps to
+   figure out the API for the web communication.
+*** Single client
+*** Multiple clients
+** Web client communicating with Haskell server
+   I’m thinking either Purescript or Elm for the client.
+** More game features
+*** Winning/losing
+*** Bonus for using all your tiles
+*** Passing
+*** Swapping tiles with the bag
+*** Challenging incorrect plays
+** Waiting room, multiple games, etc.
+** Haskell GUI client
+   Not a huge priority, but might be a nice thing to work on
+** Experiments
+*** Code structures, e.g. MTL, free monads
+*** Generate client javascript from Haskell somehow
+    GHCJS or polysemy?
+*** Event sourcing
+    Might be a bit weird, but I think it might also be handy for communication –
+    frontend and backend could maybe communicate by exchanging events? (This
+    would mean they’d need a common understanding of the events though, which
+    might be messy.)
