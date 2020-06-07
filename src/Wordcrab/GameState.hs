@@ -1,3 +1,5 @@
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Wordcrab.GameState where
 
@@ -10,16 +12,23 @@ import qualified Data.List.NonEmpty as NE
 import Wordcrab.Board (Board)
 import qualified Wordcrab.Tiles as Tiles
 import Wordcrab.Player (Player(..))
+import GHC.Generics (Generic)
+import Data.Aeson (FromJSON, ToJSON)
 
 data GameState m = GameState
   { _board :: m (Board Tiles.PlayedTile)
   , _players :: Players
   , _tiles :: [Tiles.Tile]
-  }
+  } deriving Generic
+
+instance ToJSON (GameState Identity)
+instance FromJSON (GameState Identity)
 
 newtype Players = Players
   { rotating :: NonEmpty (Integer, Player)
-  }
+  } deriving Generic
+instance ToJSON Players
+instance FromJSON Players
 
 initialPlayers :: NonEmpty Player -> Players
 initialPlayers ps = Players (NE.zip (1 :| [2..]) ps)

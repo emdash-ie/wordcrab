@@ -12,7 +12,11 @@ import System.Random.Shuffle (shuffle')
 data Tile = Blank | Letter LetterTile deriving (Generic, Show, Eq)
 instance ToJSON Tile
 instance FromJSON Tile
-data PlayedTile = PlayedBlank Char | PlayedLetter LetterTile deriving (Show)
+
+data PlayedTile = PlayedBlank Char | PlayedLetter LetterTile deriving (Show, Generic)
+instance ToJSON PlayedTile
+instance FromJSON PlayedTile
+
 data LetterTile = LetterTile
   { letter :: Char
   , score :: Integer

@@ -1,0 +1,117 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.31.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: 06863454fe5dea4dff9d1ac0b6b2bf044260a9e8b28e6d457fadb58a073e817f
+
+name:           Wordcrab
+version:        0.1.0.0
+description:    Please see the README on GitHub at <https://github.com/undergroundquizscene/wordcrab#readme>
+homepage:       https://github.com/undergroundquizscene/wordcrab#readme
+bug-reports:    https://github.com/undergroundquizscene/wordcrab/issues
+author:         Noel Bourke
+maintainer:     undergroundquizscene@protonmail.com
+copyright:      Noel Bourke
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+extra-source-files:
+    README.md
+    ChangeLog.md
+
+source-repository head
+  type: git
+  location: https://github.com/undergroundquizscene/wordcrab
+
+library
+  exposed-modules:
+      Wordcrab.Board
+      Wordcrab.Brick
+      Wordcrab.Brick.ClientState
+      Wordcrab.GameState
+      Wordcrab.Player
+      Wordcrab.Server
+      Wordcrab.Test
+      Wordcrab.Tiles
+  other-modules:
+      Paths_Wordcrab
+  hs-source-dirs:
+      src
+  build-depends:
+      aeson >=1.4.5 && <1.5
+    , base >=4.7 && <5
+    , brick
+    , bytestring >=0.10.8.2 && <0.11
+    , containers
+    , io-streams >=1.5 && <1.6
+    , lens
+    , network >=3 && <3.2
+    , random
+    , random-shuffle
+    , servant
+    , servant-server
+    , text
+    , transformers >=0.5.6 && <0.6
+    , vector
+    , vty
+    , warp
+  default-language: Haskell2010
+
+executable wordcrab-exe
+  main-is: Main.hs
+  other-modules:
+      Paths_Wordcrab
+  hs-source-dirs:
+      app
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      Wordcrab
+    , aeson >=1.4.5 && <1.5
+    , base >=4.7 && <5
+    , brick
+    , bytestring >=0.10.8.2 && <0.11
+    , containers
+    , io-streams >=1.5 && <1.6
+    , lens
+    , network >=3 && <3.2
+    , random
+    , random-shuffle
+    , servant
+    , servant-server
+    , text
+    , transformers >=0.5.6 && <0.6
+    , vector
+    , vty
+    , warp
+  default-language: Haskell2010
+
+test-suite Wordcrab-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Paths_Wordcrab
+  hs-source-dirs:
+      test
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      Wordcrab
+    , aeson >=1.4.5 && <1.5
+    , base >=4.7 && <5
+    , brick
+    , bytestring >=0.10.8.2 && <0.11
+    , containers
+    , io-streams >=1.5 && <1.6
+    , lens
+    , network >=3 && <3.2
+    , random
+    , random-shuffle
+    , servant
+    , servant-server
+    , text
+    , transformers >=0.5.6 && <0.6
+    , vector
+    , vty
+    , warp
+  default-language: Haskell2010

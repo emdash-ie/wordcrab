@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric #-}
 module Wordcrab.Board
   ( Board(..)
   , Direction(..)
@@ -24,6 +25,7 @@ where
 import Prelude hiding (lookup)
 
 import Control.Category ((>>>))
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Bifunctor (first, second)
 import Data.Bool (bool)
 import Data.Foldable (fold)
@@ -35,12 +37,25 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Data.Maybe (isJust, catMaybes)
 import qualified Data.Vector as V
 import Data.Vector (Vector)
+import GHC.Generics (Generic)
 
-newtype Board t = Board { unBoard :: Vector (Row t) }
-newtype Row t = Row { unRow :: Vector (Square (Maybe t)) }
+newtype Board t = Board { unBoard :: Vector (Row t) } deriving Generic
+instance ToJSON t => ToJSON (Board t)
+instance FromJSON t => FromJSON (Board t)
 
-data SquareType = Normal | WordMultiplier Int | LetterMultiplier Int deriving Show
-data Square a = Square { squareType :: SquareType, squareContents :: a } deriving Show
+newtype Row t = Row { unRow :: Vector (Square (Maybe t)) } deriving Generic
+instance ToJSON t => ToJSON (Row t)
+instance FromJSON t => FromJSON (Row t)
+
+data SquareType = Normal | WordMultiplier Int | LetterMultiplier Int
+  deriving (Show, Generic)
+instance ToJSON SquareType
+instance FromJSON SquareType
+
+data Square a = Square { squareType :: SquareType, squareContents :: a }
+  deriving (Show, Generic)
+instance ToJSON a => ToJSON (Square a)
+instance FromJSON a => FromJSON (Square a)
 
 isWordMultiplier :: SquareType -> Bool
 isWordMultiplier (WordMultiplier _) = True
