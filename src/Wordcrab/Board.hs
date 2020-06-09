@@ -202,7 +202,9 @@ wordFrom vp@(ValidPosition p) d b = case lookup b vp of
 
 type Play t = (Board t, NonEmpty (TileInPlay t), [[TileInPlay t]])
 type TileInPlay t = (PlayedWhen, Square t)
-data PlayedWhen = PlayedNow | PlayedEarlier deriving (Show, Eq)
+data PlayedWhen = PlayedNow | PlayedEarlier deriving (Show, Eq, Generic)
+instance ToJSON PlayedWhen
+instance FromJSON PlayedWhen
 
 play ::
   Position ->
@@ -252,11 +254,13 @@ showCell :: (t -> String) -> Square (Maybe t) -> String
 showCell _ (Square _ Nothing) = "_"
 showCell showT (Square _ (Just t)) = showT t
 
-data Direction = Horizontal | Vertical deriving (Show)
+data Direction = Horizontal | Vertical deriving (Show, Generic)
 instance Enum Direction where
   fromEnum Horizontal = 0
   fromEnum Vertical = 1
   toEnum = bool Horizontal Vertical . odd
+instance ToJSON Direction
+instance FromJSON Direction
 
 forward :: Direction -> Position -> Position
 forward Horizontal p = p { positionX = positionX p + 1 }
@@ -269,4 +273,6 @@ backward Vertical p = p { positionY = positionY p - 1 }
 data Position = Position
   { positionX :: Int
   , positionY :: Int
-  } deriving (Show, Eq)
+  } deriving (Show, Eq, Generic)
+instance ToJSON Position
+instance FromJSON Position
