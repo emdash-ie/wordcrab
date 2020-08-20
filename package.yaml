@@ -36,7 +36,10 @@ dependencies:
 - containers
 - servant
 - servant-server
+- servant-client
 - warp
+- http-client
+- wai-extra
 
 library:
   source-dirs: src

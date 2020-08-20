@@ -8,6 +8,9 @@
    Seems like a good intermediate step before a non-Haskell client, helps to
    figure out the API for the web communication.
 *** Single client
+**** DONE Make a client program that talks to the new server
+     This should be the ~brick~ program but using a ~Backend~ value that talks
+     to the server (~Backend IO~ or something?)
 *** Multiple clients
 ** Web client communicating with Haskell server
    I’m thinking either Purescript or Elm for the client.
@@ -29,3 +32,7 @@
     frontend and backend could maybe communicate by exchanging events? (This
     would mean they’d need a common understanding of the events though, which
     might be messy.)
+*** Recursion schemes
+    I’m /sure/ I could use them somewhere :grin: Especially since I read that
+    different coalgebras can represent different classes of automata, e.g.
+    finite state automata or tree automata.

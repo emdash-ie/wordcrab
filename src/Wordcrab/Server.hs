@@ -7,15 +7,18 @@ module Wordcrab.Server where
 import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Trans.Reader (runReaderT, asks, ReaderT)
-import Data.Aeson (FromJSON, ToJSON)
+import Data.Aeson (FromJSON, ToJSON, toJSON)
+import Data.Bifunctor (bimap)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Functor.Identity (Identity(..))
 import Data.List.NonEmpty (NonEmpty(..))
 import Data.Proxy (Proxy(..))
+import Data.Text (Text)
 import qualified Data.Vector as V
 import GHC.Conc (newTVar, writeTVar, readTVar, atomically, TVar)
 import GHC.Generics (Generic)
 import Network.Wai.Handler.Warp (run)
+import Network.Wai.Middleware.RequestLogger (logStdoutDev)
 import Servant (throwError, (:<|>)(..), Application, HasServer(..), Server, hoistServer, serve, Post, err400, ServerError(..))
 import Servant.API (ReqBody, Put, JSON, Get, (:>))
 import Servant.Server (Handler)
@@ -23,12 +26,13 @@ import Wordcrab.Board (Direction(..), Position(..), PlayError, TileInPlay, Direc
 import qualified Wordcrab.Board as Board
 import Wordcrab.GameState (initialPlayers, Players(..), GameState(..))
 import Wordcrab.Player (Player (..))
+import Wordcrab.PlayResult (PlayResult (..))
 import Wordcrab.Tiles (PlayedTile(..), n, m, a, d, tileScore, PlayedTile)
 
 main :: IO ()
 main = do
   s <- atomically (newTVar initialState)
-  run 9432 (app (ServerState s))
+  run 9432 (logStdoutDev (app (ServerState s)))
 
 type WordcrabAPI =
   "get-state" :> Get '[JSON] (GameState Identity) :<|>
@@ -45,14 +49,14 @@ data Play = Play
 instance ToJSON Play
 instance FromJSON Play
 
-data PlayResult = PlayResult
-  { newBoard :: Board PlayedTile
-  , mainWord :: NonEmpty (TileInPlay PlayedTile)
-  , perpendicularWords :: [[TileInPlay PlayedTile]]
-  , score :: Integer
-  } deriving Generic
-instance ToJSON PlayResult
-instance FromJSON PlayResult
+-- data PlayResult = PlayResult
+--   { newBoard :: Board PlayedTile
+--   , mainWord :: NonEmpty (TileInPlay PlayedTile)
+--   , perpendicularWords :: [[TileInPlay PlayedTile]]
+--   , score :: Integer
+--   } deriving Generic
+-- instance ToJSON PlayResult
+-- instance FromJSON PlayResult
 
 server :: ServerT WordcrabAPI AppM
 server = currentState :<|> setState :<|> play :<|> preview :<|> pure dummyPlay
@@ -86,6 +90,7 @@ play p = do
     sequence $ do
       (gs', pr) <- playResult p gs
       pure $ writeTVar s gs' >> pure pr
+  -- liftIO (print (bimap show (show . toJSON) e))
   case e of
     Left e' -> throwError err400 {errBody = pack (show e')}
     Right pr -> pure pr

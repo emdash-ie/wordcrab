@@ -7,6 +7,8 @@ import qualified Brick
 import Brick.Widgets.Border (border, hBorder, vBorder)
 import Brick.Widgets.Center (center)
 import Control.Category ((>>>))
+import Control.Monad (join)
+import Control.Monad.IO.Class (liftIO)
 import Control.Lens ((^.), (*~), _1, _2, to, (.~), (+~), (%~), (?~), Lens')
 import Data.Bifunctor (first, second)
 import Data.Either (fromRight)
@@ -23,6 +25,9 @@ import qualified Data.Vector as V
 import Graphics.Vty (defAttr, Key(..), Event(..), rgbColor)
 import Prelude hiding (lookup)
 import System.Random (getStdGen)
+import Network.HTTP.Client (defaultManagerSettings, newManager)
+import Servant ((:<|>)(..))
+import Servant.Client (client, ClientM, runClientM, BaseUrl(..), Scheme(..), mkClientEnv)
 
 import qualified Wordcrab.Board as Board
 import qualified Wordcrab.Tiles as Tiles
@@ -34,6 +39,7 @@ import Wordcrab.GameState (GameState(..), board, tiles, players, currentPlayer, 
 import qualified Wordcrab.GameState as GameState
 import Wordcrab.Client hiding (State)
 import qualified Wordcrab.Client as Client
+import qualified Wordcrab.Server as Server
 
 main :: IO ()
 main = do
@@ -143,19 +149,37 @@ main = do
         { backendPreview = f
         , backendPlay = f
         }
+      webBackend :: Backend IO
+      webBackend = let
+        _ :<|> _ :<|> play :<|> preview :<|> _ = client Server.wordcrabAPI
+        httpManager = newManager defaultManagerSettings
+        clientEnv = flip mkClientEnv (BaseUrl Http "localhost" 9432 "") <$> httpManager
+        in Backend
+          { backendPreview = \p d ts _ -> do
+              env <- clientEnv
+              result <- runClientM (preview (Server.Play p d ts)) env
+              pure (first (const undefined) result)
+          , backendPlay = \p d ts _ -> do
+              env <- clientEnv
+              result <- runClientM (play (Server.Play p d ts)) env
+              pure (first (const undefined) result)
+          }
       handleEvent :: Client.State -> Brick.BrickEvent n e -> Brick.EventM w (Brick.Next Client.State)
       handleEvent s = \case
         Brick.VtyEvent (EvKey (KChar 'q') (_:_)) -> Brick.halt s
         Brick.VtyEvent (EvKey (KChar c) _) -> case c of
-            ' ' -> Brick.continue (runIdentity (placeOrSelectTile backend s))
-            c -> Brick.continue (runIdentity (updateBlank backend s c))
+            ' ' -> liftIO (placeOrSelectTile webBackend s) >>= Brick.continue
+            c -> liftIO (updateBlank webBackend s c) >>= Brick.continue
         Brick.VtyEvent (EvKey KRight _) -> Brick.continue $ moveRight s
         Brick.VtyEvent (EvKey KLeft _) -> Brick.continue $ moveLeft s
         Brick.VtyEvent (EvKey KDown _) -> Brick.continue $ moveDown s
         Brick.VtyEvent (EvKey KUp _) -> Brick.continue $ moveUp s
-        Brick.VtyEvent (EvKey KEnter _) -> Brick.continue $ confirmPlay s
-        Brick.VtyEvent (EvKey KBS _) -> Brick.continue $
-          either (message s . Text.pack) id (fmap runIdentity (pickUpTile backend s))
+        Brick.VtyEvent (EvKey KEnter _) -> do
+          s <- liftIO (confirmPlay webBackend s)
+          Brick.continue s
+        Brick.VtyEvent (EvKey KBS _) -> do
+          e <- liftIO $ sequence (pickUpTile webBackend s)
+          Brick.continue $ either (message s . Text.pack) id e
         _ -> Brick.continue s
       doubleWord = Brick.attrName "doubleWord"
       tripleWord = Brick.attrName "tripleWord"

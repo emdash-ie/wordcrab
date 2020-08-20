@@ -48,19 +48,16 @@ import qualified Data.List.NonEmpty as NE
 import Data.Bifunctor (first, second)
 
 data Backend m = Backend
-  { backendPlay ::
-      Board.Position ->
-      Board.Direction ->
-      NonEmpty Tiles.PlayedTile ->
-      Board.Board Tiles.PlayedTile ->
-      m (Either (Board.PlayError Tiles.PlayedTile) PlayResult)
-  , backendPreview ::
-      Board.Position ->
-      Board.Direction ->
-      NonEmpty Tiles.PlayedTile ->
-      Board.Board Tiles.PlayedTile ->
-      m (Either (Board.PlayError Tiles.PlayedTile) PlayResult)
+  { backendPlay :: BackendPlay m
+  , backendPreview :: BackendPlay m
   }
+
+type BackendPlay m =
+  Board.Position ->
+  Board.Direction ->
+  NonEmpty Tiles.PlayedTile ->
+  Board.Board Tiles.PlayedTile ->
+  m (Either (Board.PlayError Tiles.PlayedTile) PlayResult)
 
 data State = State
   { _current :: GameState Identity
@@ -106,29 +103,33 @@ placeTile backend cs = do
     & preview . placed %~ Map.insert (cs ^. boardCursor) playedTile
     & preview . gameState . players . currentPlayer . rack %~ remove i
   pure $ do
-    r <- updatePreview backend cs
+    r <- updatePreview (backendPreview backend) cs
     pure $ case r of
       (Nothing, cs) -> cs
       (Just e, cs) -> cs
         & flip message ("can't play: invalid move (" <> pack (show e) <> ")")
 
-confirmPlay :: State -> State
-confirmPlay cs = let
-  newBoard = cs ^. preview . gameState . board
-  newScore = cs ^. preview . gameState . players . currentPlayer . Player.score
-  remainingTiles = cs ^. preview . gameState . players . currentPlayer . rack
-  needed = 7 - length remainingTiles
-  (newTiles, newBag) = splitAt needed (cs ^. preview . gameState . tiles)
-  in case newBoard of
-    Right b -> cs
-               & current . players . currentPlayer . Player.score .~ newScore
-               & current . board .~ Identity b
-               & current . players . currentPlayer . rack .~ (remainingTiles <> newTiles)
-               & current . players %~ GameState.nextPlayer
-               & current . tiles .~ newBag
-               & preview . placed .~ Map.empty
-               & \cs' -> cs' & preview . gameState .~ toPreviewState (cs' ^. current)
-    Left e -> message cs $ "Can’t play: invalid move (" <> pack (show e) <> ")"
+confirmPlay :: Monad m => Backend m -> State -> m State
+confirmPlay b cs = do
+  (error, newState) <- updatePreview (backendPlay b) cs
+  pure $ case error of
+    Just e -> message cs $ "Can’t play: invalid move (" <> pack (show e) <> ")"
+    Nothing -> let
+      newBoard = newState ^. preview . gameState . board
+      newScore = newState ^. preview . gameState . players . currentPlayer . Player.score
+      remainingTiles = newState ^. preview . gameState . players . currentPlayer . rack
+      needed = 7 - length remainingTiles
+      (newTiles, newBag) = splitAt needed (newState ^. preview . gameState . tiles)
+      in case newBoard of
+        Right b -> newState
+                  & current . players . currentPlayer . Player.score .~ newScore
+                  & current . board .~ Identity b
+                  & current . players . currentPlayer . rack .~ (remainingTiles <> newTiles)
+                  & current . players %~ GameState.nextPlayer
+                  & current . tiles .~ newBag
+                  & preview . placed .~ Map.empty
+                  & \cs' -> cs' & preview . gameState .~ toPreviewState (cs' ^. current)
+        Left e -> message cs $ "Can’t play: invalid move (" <> pack (show e) <> ")"
 
 message :: State -> Text -> State
 message cs m = cs & messages %~ (m :)
@@ -139,12 +140,12 @@ updateBlank backend s c = let
   target = Map.lookup cursor (s ^. preview . placed)
   in case (s ^. rackCursor, target) of
     (Nothing, Just (Tiles.PlayedBlank _)) ->
-      fmap snd $ updatePreview backend $
+      fmap snd $ updatePreview (backendPreview backend) $
         s & preview . placed %~ Map.adjust (const $ Tiles.PlayedBlank c) cursor
     _ -> pure $ message s "Can only add a letter to a blank tile you've placed this turn"
 
-updatePreview :: Monad m => Backend m -> State -> m (Maybe OrganiseError, State)
-updatePreview backend cs = do
+updatePreview :: Monad m => BackendPlay m -> State -> m (Maybe OrganiseError, State)
+updatePreview backendPlay cs = do
   cs <- pure $ cs
           & preview . gameState . board .~ (cs ^. current . board . to runIdentity . to pure)
           & preview . gameState . players . currentPlayer . Player.score
@@ -154,10 +155,7 @@ updatePreview backend cs = do
     Left NoTiles -> pure cs
     Left InconsistentDirection -> pure cs
     Right (p, d, ts) -> do
-      m <- (backendPlay backend) p
-                d
-                ts
-                (runIdentity $ cs ^. current . board)
+      m <- backendPlay p d ts (runIdentity $ cs ^. current . board)
       pure $ case m of
         Right pr ->
           cs & preview . gameState . board .~ Right (pr ^. newBoard)
@@ -179,7 +177,7 @@ pickUpTile backend cs = do
   case m of
     Nothing -> Left "Can’t delete a tile you didn’t place this turn"
     Just t -> pure $ fmap snd $
-        updatePreview backend $
+        updatePreview (backendPreview backend) $
           cs & preview . placed %~ Map.delete (cs ^. boardCursor)
              & preview . gameState . players . currentPlayer . rack %~ (Tiles.unplay t :)
 
