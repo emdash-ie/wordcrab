@@ -73,7 +73,11 @@ tileMultiplier _ t = case t of
   LetterMultiplier i -> i
   _ -> 1
 
-newtype ValidPosition = ValidPosition {unwrapPosition :: Position} deriving (Eq, Show)
+newtype ValidPosition = ValidPosition {unwrapPosition :: Position}
+  deriving (Eq, Show, Generic)
+
+instance ToJSON ValidPosition
+instance FromJSON ValidPosition
 
 validatePosition :: Position -> Board t -> Maybe ValidPosition
 validatePosition p (Board rs) =
@@ -233,7 +237,13 @@ play p d ts tileScore b = do
   let play = (b', fmap active mainWord, (fmap . fmap) active perpWords)
   pure (play, score tileScore play)
 
-data PlayError t = NonExistentPositions | InvalidPositions (NonEmpty (ValidPosition, Square t)) deriving (Show)
+data PlayError t
+  = NonExistentPositions
+  | InvalidPositions (NonEmpty (ValidPosition, Square t))
+  deriving (Show, Generic)
+
+instance ToJSON t => ToJSON (PlayError t)
+instance FromJSON t => FromJSON (PlayError t)
 
 score :: (t -> Integer) -> Play t -> Integer
 score tileScore (_, mainWord, perpWords) =

@@ -1,6 +1,7 @@
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeOperators #-}
 
 module Wordcrab.Server where
@@ -9,7 +10,7 @@ import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
 import Data.Aeson (FromJSON, ToJSON, toJSON)
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, first)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..))
@@ -25,22 +26,25 @@ import Servant.API (Get, JSON, Put, ReqBody, (:>))
 import Servant.Server (Handler)
 import Wordcrab.Board (Board (..), Direction (..), PlayError, Position (..), TileInPlay, blankBoard)
 import qualified Wordcrab.Board as Board
-import Wordcrab.GameState (GameState (..), Players (..), initialPlayers)
+import Wordcrab.GameState (Game (..), GameState (..), Players (..), emptyRoom, initialPlayers, _lastPlayerId)
+import qualified Wordcrab.GameState as GameState
 import Wordcrab.PlayResult (PlayResult (..))
 import Wordcrab.Player (Player (..))
+import qualified Wordcrab.Player as Player
 import Wordcrab.Tiles (PlayedTile (..), a, d, m, n, tileScore)
 
 main :: IO ()
 main = do
-  s <- atomically (newTVar initialState)
+  s <- atomically (newTVar (Waiting emptyRoom))
   run 9432 (logStdoutDev (app (ServerState s)))
 
 type WordcrabAPI =
-  "get-state" :> Get '[JSON] (GameState Identity)
-    :<|> "set-state" :> ReqBody '[JSON] (GameState Identity) :> Put '[JSON] Bool
+  "get-state" :> Get '[JSON] (Game Identity)
+    :<|> "set-state" :> ReqBody '[JSON] (Game Identity) :> Put '[JSON] Bool
     :<|> "play" :> ReqBody '[JSON] Play :> Post '[JSON] PlayResult
     :<|> "preview" :> ReqBody '[JSON] Play :> Get '[JSON] PlayResult
     :<|> "dummy-play" :> Get '[JSON] Play
+    :<|> "join" :> Post '[JSON] (GameState.Room, Player.Id)
 
 data Play = Play
   { position :: Position
@@ -61,7 +65,7 @@ instance FromJSON Play
 -- instance FromJSON PlayResult
 
 server :: ServerT WordcrabAPI AppM
-server = currentState :<|> setState :<|> play :<|> preview :<|> pure dummyPlay
+server = currentState :<|> setState :<|> play :<|> preview :<|> pure dummyPlay :<|> joinGame
 
 wordcrabAPI :: Proxy WordcrabAPI
 wordcrabAPI = Proxy
@@ -69,16 +73,16 @@ wordcrabAPI = Proxy
 app :: ServerState -> Application
 app s = serve wordcrabAPI (hoistServer wordcrabAPI (nt s) server)
 
-data ServerState = ServerState {gameState :: TVar (GameState Identity)}
+data ServerState = ServerState {gameState :: TVar (Game Identity)}
 
 type AppM = ReaderT ServerState Handler
 
-currentState :: AppM (GameState Identity)
+currentState :: AppM (Game Identity)
 currentState = do
   s <- asks gameState
   liftIO (atomically (readTVar s))
 
-setState :: GameState Identity -> AppM Bool
+setState :: Game Identity -> AppM Bool
 setState new = do
   s <- asks gameState
   liftIO (atomically (writeTVar s new))
@@ -87,15 +91,17 @@ setState new = do
 play :: Play -> AppM (PlayResult)
 play p = do
   s <- asks gameState
-  e <- liftIO $
+  result <- liftIO $
     atomically $ do
-      gs <- readTVar s
-      sequence $ do
-        (gs', pr) <- playResult p gs
-        pure $ writeTVar s gs' >> pure pr
+      g <- readTVar s
+      case g of
+        Waiting _ -> pure (Left "Can't play before the game has started")
+        Started gs -> sequence $ do
+          (gs', pr) <- first show (playResult p gs)
+          pure $ writeTVar s (Started gs') >> pure pr
   -- liftIO (print (bimap show (show . toJSON) e))
-  case e of
-    Left e' -> throwError err400{errBody = pack (show e')}
+  case result of
+    Left e -> throwError err400{errBody = pack e}
     Right pr -> pure pr
 
 playResult ::
@@ -111,21 +117,32 @@ playResult
 preview :: Play -> AppM (PlayResult)
 preview p = do
   s <- asks gameState
-  gs <- liftIO (atomically (readTVar s))
-  case playResult p gs of
-    Left e -> throwError err400{errBody = pack (show e)}
-    Right (_, pr) -> pure pr
+  g <- liftIO (atomically (readTVar s))
+  case g of
+    Waiting _ ->
+      throwError err400{errBody = "Can't play before the game has started"}
+    Started gs -> case playResult p gs of
+      Left e -> throwError err400{errBody = pack (show e)}
+      Right (_, pr) -> pure pr
 
 dummyPlay :: Play
 dummyPlay = Play (Position 7 7) Horizontal (fmap PlayedLetter (d :| [a, m, n]))
 
-initialState :: GameState Identity
-initialState =
-  GameState
-    { _board = Identity blankBoard
-    , _players = initialPlayers (Player 0 [] :| [Player 0 []])
-    , _tiles = []
-    }
+joinGame :: AppM (GameState.Room, Player.Id)
+joinGame = do
+  s <- asks gameState
+  result <- liftIO $
+    atomically $ do
+      g <- readTVar s
+      case g of
+        Waiting r -> do
+          let r' = GameState.join r
+          writeTVar s (Waiting r')
+          pure (Right (r', _lastPlayerId r'))
+        Started _ -> pure (Left "Can't join a game once it has started")
+  case result of
+    Right t -> pure t
+    Left message -> throwError err400{errBody = message}
 
 nt :: ServerState -> AppM a -> Handler a
 nt s x = runReaderT x s

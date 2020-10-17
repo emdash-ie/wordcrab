@@ -9,11 +9,17 @@ import GHC.Generics
 import System.Random (StdGen)
 import System.Random.Shuffle (shuffle')
 
-data Tile = Blank | Letter LetterTile deriving (Generic, Show, Eq)
+data Tile
+  = Blank
+  | Letter LetterTile
+  deriving (Generic, Show, Eq)
 instance ToJSON Tile
 instance FromJSON Tile
 
-data PlayedTile = PlayedBlank Char | PlayedLetter LetterTile deriving (Show, Generic)
+data PlayedTile
+  = PlayedBlank Char
+  | PlayedLetter LetterTile
+  deriving (Show, Generic)
 instance ToJSON PlayedTile
 instance FromJSON PlayedTile
 

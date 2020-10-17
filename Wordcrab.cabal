@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: f2480bf29dda56e14f3dbb048c0768d30efba23f07720239fcec2ac6de51bdab
+-- hash: 2a24aa55ea5c290a848a230d927092e4808b3e488abdb3a91f1f814fa467be95
 
 name:           Wordcrab
 version:        0.1.0.0
@@ -32,6 +32,8 @@ library
       Wordcrab.Client
       Wordcrab.GameState
       Wordcrab.Player
+      Wordcrab.Player.Id
+      Wordcrab.Player.Waiting
       Wordcrab.PlayResult
       Wordcrab.Server
       Wordcrab.Test
@@ -47,6 +49,7 @@ library
     , bytestring >=0.10.8.2 && <0.11
     , containers
     , http-client
+    , http-types
     , io-streams >=1.5 && <1.6
     , lens
     , network >=3 && <3.2
@@ -78,6 +81,7 @@ executable wordcrab-exe
     , bytestring >=0.10.8.2 && <0.11
     , containers
     , http-client
+    , http-types
     , io-streams >=1.5 && <1.6
     , lens
     , network >=3 && <3.2
@@ -110,6 +114,7 @@ test-suite Wordcrab-test
     , bytestring >=0.10.8.2 && <0.11
     , containers
     , http-client
+    , http-types
     , io-streams >=1.5 && <1.6
     , lens
     , network >=3 && <3.2

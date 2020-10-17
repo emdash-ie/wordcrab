@@ -40,6 +40,7 @@ dependencies:
 - warp
 - http-client
 - wai-extra
+- http-types
 
 library:
   source-dirs: src

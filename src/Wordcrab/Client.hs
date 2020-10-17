@@ -1,9 +1,14 @@
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Wordcrab.Client (
   Backend (..),
+  BackendError (..),
   State (..),
+  _Started,
+  _Waiting,
+  InProgress (..),
   current,
   preview,
   boardCursor,
@@ -26,7 +31,8 @@ module Wordcrab.Client (
 ) where
 
 import Control.Category ((>>>))
-import Control.Lens (makeLenses, to, (%~), (.~), (?~), (^.))
+import Control.Lens (makeLenses, makePrisms, to, (%~), (.~), (?~), (^.))
+import Data.Aeson (FromJSON, ToJSON)
 import Data.Bifunctor (first, second)
 import Data.Either (fromRight)
 import Data.Function ((&))
@@ -37,9 +43,19 @@ import qualified Data.Map.Strict as Map
 import Data.Maybe (isJust, isNothing)
 import Data.Text (Text, pack)
 import qualified Data.Vector as V
+import GHC.Generics (Generic)
+
 import Wordcrab.Board (Board)
 import qualified Wordcrab.Board as Board
-import Wordcrab.GameState (GameState (..), board, currentPlayer, players, tiles, toPreviewState)
+import Wordcrab.GameState (
+  GameState (..),
+  JoinError,
+  board,
+  currentPlayer,
+  players,
+  tiles,
+  toPreviewState,
+ )
 import qualified Wordcrab.GameState as GameState
 import Wordcrab.PlayResult (PlayResult, newBoard)
 import qualified Wordcrab.PlayResult as PlayResult
@@ -50,16 +66,26 @@ import qualified Wordcrab.Tiles as Tiles
 data Backend m = Backend
   { backendPlay :: BackendPlay m
   , backendPreview :: BackendPlay m
+  , backendJoin :: m (Either (BackendError JoinError) (GameState.Room, Player.Id))
+  , backendRefresh :: m (Either (BackendError ()) (GameState.Game Identity))
   }
+
+data BackendError e = SpecificError e | OtherError Text deriving (Show, Generic)
+instance ToJSON e => ToJSON (BackendError e)
+instance FromJSON e => FromJSON (BackendError e)
 
 type BackendPlay m =
   Board.Position ->
   Board.Direction ->
   NonEmpty Tiles.PlayedTile ->
   Board.Board Tiles.PlayedTile ->
-  m (Either (Board.PlayError Tiles.PlayedTile) PlayResult)
+  m (Either (BackendError (Board.PlayError Tiles.PlayedTile)) PlayResult)
 
-data State = State
+data State
+  = Waiting GameState.Room
+  | Started InProgress
+
+data InProgress = InProgress
   { _current :: GameState Identity
   , _preview :: Preview
   , _boardCursor :: (Int, Int)
@@ -74,10 +100,11 @@ data Preview = Preview
   , _playResult :: Maybe PlayResult
   }
 
-makeLenses ''State
+makePrisms ''State
 makeLenses ''Preview
+makeLenses ''InProgress
 
-placeOrSelectTile :: Monad m => Backend m -> State -> m State
+placeOrSelectTile :: Monad m => Backend m -> InProgress -> m InProgress
 placeOrSelectTile backend cs =
   if cursorOnBoard
     then
@@ -94,7 +121,7 @@ placeOrSelectTile backend cs =
   cell = Board.squareContents $ row V.! x
 
 -- | TODO: Prevent playing over a tile you just played
-placeTile :: Monad m => Backend m -> State -> Either PlaceError (m State)
+placeTile :: Monad m => Backend m -> InProgress -> Either PlaceError (m InProgress)
 placeTile backend cs = do
   i <- note NoCursor $ cs ^. rackCursor
   let playedTile = case (cs ^. preview . gameState . players . currentPlayer . rack) !! i of
@@ -113,7 +140,7 @@ placeTile backend cs = do
         cs
           & flip message ("can't play: invalid move (" <> pack (show e) <> ")")
 
-confirmPlay :: Monad m => Backend m -> State -> m State
+confirmPlay :: Monad m => Backend m -> InProgress -> m InProgress
 confirmPlay b cs = do
   (error, newState) <- updatePreview (backendPlay b) cs
   pure $ case error of
@@ -136,10 +163,10 @@ confirmPlay b cs = do
                 & \cs' -> cs' & preview . gameState .~ toPreviewState (cs' ^. current)
             Left e -> message cs $ "Can’t play: invalid move (" <> pack (show e) <> ")"
 
-message :: State -> Text -> State
+message :: InProgress -> Text -> InProgress
 message cs m = cs & messages %~ (m :)
 
-updateBlank :: Monad m => Backend m -> State -> Char -> m State
+updateBlank :: Monad m => Backend m -> InProgress -> Char -> m InProgress
 updateBlank backend s c =
   let cursor = s ^. boardCursor
       target = Map.lookup cursor (s ^. preview . placed)
@@ -150,7 +177,7 @@ updateBlank backend s c =
               s & preview . placed %~ Map.adjust (const $ Tiles.PlayedBlank c) cursor
         _ -> pure $ message s "Can only add a letter to a blank tile you've placed this turn"
 
-updatePreview :: Monad m => BackendPlay m -> State -> m (Maybe OrganiseError, State)
+updatePreview :: Monad m => BackendPlay m -> InProgress -> m (Maybe OrganiseError, InProgress)
 updatePreview backendPlay cs = do
   cs <-
     pure $
@@ -172,9 +199,10 @@ updatePreview backendPlay cs = do
                     + (cs ^. current . players . currentPlayer . Player.score)
                  )
             & preview . playResult .~ Just pr
-        Left e ->
+        Left (SpecificError e) ->
           cs & preview . gameState . board .~ Left e
             & preview . playResult .~ Nothing
+        Left (OtherError e) -> message cs e
   let db =
         foldr
           (\(xy, t) b -> updateBoard xy t b)
@@ -182,7 +210,7 @@ updatePreview backendPlay cs = do
           (Map.toList $ cs ^. preview . placed)
   pure (either Just (const Nothing) ot, cs & preview . displayBoard .~ db)
 
-pickUpTile :: Monad m => Backend m -> State -> Either String (m State)
+pickUpTile :: Monad m => Backend m -> InProgress -> Either String (m InProgress)
 pickUpTile backend cs = do
   _ <- maybe (Right ()) (const $ Left "Can’t delete from rack") (cs ^. rackCursor)
   let m = Map.lookup (cs ^. boardCursor) (cs ^. preview . placed)
@@ -200,7 +228,7 @@ note a = maybe (Left a) Right
 
 data PlaceError = Organise OrganiseError | NoCursor
 
-organiseTiles :: State -> Either OrganiseError (Board.Position, Board.Direction, NonEmpty Tiles.PlayedTile)
+organiseTiles :: InProgress -> Either OrganiseError (Board.Position, Board.Direction, NonEmpty Tiles.PlayedTile)
 organiseTiles cs = case Map.toList $ cs ^. preview . placed of
   [] -> Left NoTiles
   t@((x, y), _) : ts ->
@@ -236,8 +264,8 @@ remove i xs = take i xs <> drop (i + 1) xs
 move ::
   ((Int -> Int) -> (Int, Int) -> (Int, Int)) ->
   (Int -> Int) ->
-  State ->
-  State
+  InProgress ->
+  InProgress
 move f g cs =
   let boardMove = f ((`mod` 15) . g) (cs ^. boardCursor)
       rackMove =
@@ -248,16 +276,16 @@ move f g cs =
         then rackCursor .~ rackMove $ cs
         else boardCursor .~ boardMove $ cs
 
-moveRight :: State -> State
+moveRight :: InProgress -> InProgress
 moveRight = move first (+ 1)
 
-moveLeft :: State -> State
+moveLeft :: InProgress -> InProgress
 moveLeft = move first (subtract 1)
 
-moveUp :: State -> State
+moveUp :: InProgress -> InProgress
 moveUp = move second (subtract 1)
 
-moveDown :: State -> State
+moveDown :: InProgress -> InProgress
 moveDown = move second (+ 1)
 
 toBoardPosition :: (Int, Int) -> Board.Position
