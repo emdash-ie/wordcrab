@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 module Wordcrab.PlayResult where
 
 import Control.Lens (makeLenses)
@@ -15,7 +16,8 @@ data PlayResult = PlayResult
   , _mainWord :: NonEmpty (TileInPlay PlayedTile)
   , _perpendicularWords :: [[TileInPlay PlayedTile]]
   , _score :: Integer
-  } deriving (Generic)
+  }
+  deriving (Generic)
 instance ToJSON PlayResult
 instance FromJSON PlayResult
 

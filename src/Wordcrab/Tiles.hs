@@ -1,10 +1,10 @@
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 
 module Wordcrab.Tiles where
 
 import Control.Monad (join)
-import Data.Aeson (ToJSON, FromJSON)
+import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics
 import System.Random (StdGen)
 import System.Random.Shuffle (shuffle')
@@ -20,7 +20,8 @@ instance FromJSON PlayedTile
 data LetterTile = LetterTile
   { letter :: Char
   , score :: Integer
-  } deriving (Generic, Show, Eq)
+  }
+  deriving (Generic, Show, Eq)
 instance ToJSON LetterTile
 instance FromJSON LetterTile
 
@@ -44,42 +45,42 @@ unplay (PlayedBlank _) = Blank
 unplay (PlayedLetter lt) = Letter lt
 
 tileset :: [Tile]
-tileset = join
-  [ replicate 2 Blank
-  , replicate 9 $ Letter a
-  , replicate 2 $ Letter b
-  , replicate 2 $ Letter c
-  , replicate 4 $ Letter d
-  , replicate 12 $ Letter e
-  , replicate 2 $ Letter f
-  , replicate 3 $ Letter g
-  , replicate 2 $ Letter h
-  , replicate 9 $ Letter i
-  , replicate 1 $ Letter j
-  , replicate 1 $ Letter k
-  , replicate 4 $ Letter l
-  , replicate 2 $ Letter m
-  , replicate 6 $ Letter n
-  , replicate 8 $ Letter o
-  , replicate 2 $ Letter p
-  , replicate 1 $ Letter q
-  , replicate 6 $ Letter r
-  , replicate 4 $ Letter s
-  , replicate 6 $ Letter t
-  , replicate 4 $ Letter u
-  , replicate 2 $ Letter v
-  , replicate 2 $ Letter w
-  , replicate 1 $ Letter x
-  , replicate 2 $ Letter y
-  , replicate 1 $ Letter z
-  ]
+tileset =
+  join
+    [ replicate 2 Blank
+    , replicate 9 $ Letter a
+    , replicate 2 $ Letter b
+    , replicate 2 $ Letter c
+    , replicate 4 $ Letter d
+    , replicate 12 $ Letter e
+    , replicate 2 $ Letter f
+    , replicate 3 $ Letter g
+    , replicate 2 $ Letter h
+    , replicate 9 $ Letter i
+    , replicate 1 $ Letter j
+    , replicate 1 $ Letter k
+    , replicate 4 $ Letter l
+    , replicate 2 $ Letter m
+    , replicate 6 $ Letter n
+    , replicate 8 $ Letter o
+    , replicate 2 $ Letter p
+    , replicate 1 $ Letter q
+    , replicate 6 $ Letter r
+    , replicate 4 $ Letter s
+    , replicate 6 $ Letter t
+    , replicate 4 $ Letter u
+    , replicate 2 $ Letter v
+    , replicate 2 $ Letter w
+    , replicate 1 $ Letter x
+    , replicate 2 $ Letter y
+    , replicate 1 $ Letter z
+    ]
 
 a :: LetterTile
 a = LetterTile 'A' 1
 
 b :: LetterTile
 b = LetterTile 'B' 3
-
 
 c :: LetterTile
 c = LetterTile 'C' 3
