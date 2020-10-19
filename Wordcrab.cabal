@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2a24aa55ea5c290a848a230d927092e4808b3e488abdb3a91f1f814fa467be95
+-- hash: d92d5ad1751c160573da67723fd93eaad84482fa27b189b0d15386307cc9ff45
 
 name:           Wordcrab
 version:        0.1.0.0
@@ -29,6 +29,8 @@ library
   exposed-modules:
       Wordcrab.Board
       Wordcrab.Brick
+      Wordcrab.Brick.Attributes
+      Wordcrab.Brick.Widgets
       Wordcrab.Client
       Wordcrab.GameState
       Wordcrab.Player

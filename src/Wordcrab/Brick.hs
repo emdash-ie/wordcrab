@@ -43,6 +43,8 @@ import Servant.Client (
 import System.Random (getStdGen)
 
 import qualified Wordcrab.Board as Board
+import qualified Wordcrab.Brick.Attributes as Attributes
+import qualified Wordcrab.Brick.Widgets as Widgets
 import Wordcrab.Client hiding (State)
 import qualified Wordcrab.Client as Client
 import Wordcrab.GameState (GameState (..), JoinError (..), board, currentPlayer, players, tiles, toPreviewState)
@@ -67,7 +69,9 @@ main = do
   let app :: App Client.State e ()
       app =
         App
-          { appDraw = draw
+          { appDraw = \s -> case s of
+              Waiting r -> Widgets.waitingRoom r
+              Started ip -> Widgets.inProgress ip
           , appChooseCursor = Brick.showFirstCursor
           , appHandleEvent = handleEvent backend
           , appStartEvent = pure
@@ -75,137 +79,8 @@ main = do
           }
       (startingRack1, (startingRack2, bag)) =
         splitAt 7 <$> splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
-      initialState = Client.Waiting room
-      draw :: Client.State -> [Brick.Widget ()]
-      draw s = case s of
-        Waiting r -> drawWaitingRoom r
-        Started ip -> drawInProgress ip
 
-      drawWaitingRoom :: GameState.Room -> [Brick.Widget ()]
-      drawWaitingRoom r =
-        [ Brick.str
-            ( "In the waiting room. Last player to join was: "
-                <> show (GameState._lastPlayerId r)
-            )
-        ]
-      drawInProgress :: Client.InProgress -> [Brick.Widget ()]
-      drawInProgress s =
-        let boardWidget =
-              let c =
-                    Brick.showCursor
-                      ()
-                      ( Brick.Location $
-                          s ^. boardCursor
-                            & _1 *~ 4
-                            & _1 +~ 2
-                            & _2 *~ 2
-                            & _2 +~ 1
-                      )
-                  b =
-                    fromRight
-                      (s ^. preview . displayBoard)
-                      (s ^. preview . gameState . board)
-                  rs = V.toList (Board.unBoard b)
-                  width = (4 * length rs) + 1
-                  w =
-                    Brick.hLimit width $
-                      border $
-                        Brick.vBox $
-                          intersperse hBorder $
-                            fmap
-                              ( Brick.vLimit 1 . Brick.hBox
-                                  . intersperse vBorder
-                                  . V.toList
-                                  . fmap tileWidget
-                                  . Board.unRow
-                              )
-                              rs
-                  tileWidget :: Board.Square (Maybe Tiles.PlayedTile) -> Brick.Widget n
-                  tileWidget (Board.Square st mt) =
-                    let withAttr = case st of
-                          Board.Normal -> id
-                          Board.WordMultiplier 2 -> Brick.withAttr doubleWord
-                          Board.WordMultiplier 3 -> Brick.withAttr tripleWord
-                          Board.LetterMultiplier 2 -> Brick.withAttr doubleLetter
-                          Board.LetterMultiplier 3 -> Brick.withAttr tripleLetter
-                          _ -> id
-                     in withAttr $
-                          Brick.hLimit 3 $
-                            center $
-                              Brick.str $ case mt of
-                                Nothing -> " "
-                                Just t -> case t of
-                                  Tiles.PlayedBlank c -> [c]
-                                  Tiles.PlayedLetter lt -> [Tiles.letter lt]
-               in if isJust (s ^. rackCursor)
-                    then w
-                    else c w
-            rackWidget' =
-              Brick.padTop (Brick.Pad 1) $
-                Brick.str "Your rack:"
-                  <=> rackWidget
-                    (s ^. preview . gameState . players . currentPlayer . rack)
-                    (s ^. rackCursor)
-            scoreBoxWidget :: GameState.Players -> Maybe PlayResult -> Brick.Widget n
-            scoreBoxWidget ps result =
-              Brick.vBox $
-                ( \(i, p) ->
-                    Brick.hLimit 61 $
-                      Brick.strWrap $
-                        playerNameString i
-                          <> if p == ps ^. currentPlayer
-                            then scoreString p <> " (" <> moveString result <> ")"
-                            else scoreString p
-                )
-                  <$> zip [1 ..] (NE.toList $ GameState.turnOrder ps)
-            playerNameString i = "Player " <> show i <> ": "
-            moveString :: Maybe PlayResult -> String
-            moveString result = case result of
-              Nothing -> "Error"
-              Just pr ->
-                "-> " <> show (pr ^. PlayResult.score) <> ": " <> showWord (NE.toList (pr ^. mainWord))
-                  <> ", "
-                  <> intercalate ", " (fmap showWord (pr ^. perpendicularWords))
-            showWord :: [Board.TileInPlay Tiles.PlayedTile] -> String
-            showWord w =
-              let multiplier tip = case Board.squareType <$> tip of
-                    (Board.PlayedNow, Board.WordMultiplier n) -> n
-                    _ -> 1
-               in show (product (fmap multiplier w))
-                    <> " x "
-                    <> concatMap showTile w
-            showTile :: Board.TileInPlay Tiles.PlayedTile -> String
-            showTile (when, square) = show $ case Board.squareContents square of
-              Tiles.PlayedLetter lt ->
-                ( Tiles.letter lt
-                , Board.tileMultiplier when (Board.squareType square)
-                    * fromIntegral (Tiles.score lt)
-                )
-              Tiles.PlayedBlank c -> (c, 0)
-            scoreString p = show (p ^. Player.score)
-            messageWidget = Brick.txt $ fromMaybe "" $ listToMaybe $ s ^. messages
-         in pure $
-              center $
-                Brick.joinBorders $
-                  Brick.vBox
-                    [ boardWidget
-                    , rackWidget'
-                    , scoreBoxWidget (s ^. current . players) (s ^. preview . playResult)
-                    , messageWidget
-                    ]
-      doubleWord = Brick.attrName "doubleWord"
-      tripleWord = Brick.attrName "tripleWord"
-      doubleLetter = Brick.attrName "doubleLetter"
-      tripleLetter = Brick.attrName "tripleLetter"
-      attributes =
-        Brick.attrMap
-          defAttr
-          [ (doubleWord, Brick.bg (rgbColor 133 182 255))
-          , (tripleWord, Brick.bg (rgbColor 255 156 156))
-          , (doubleLetter, Brick.bg (rgbColor 148 219 255))
-          , (tripleLetter, Brick.bg (rgbColor 255 201 239))
-          ]
-  finalState <- defaultMain app initialState
+  finalState <- defaultMain app (Client.Waiting room)
   putStrLn "End of game"
 
 webBackend :: IO (Backend IO)
@@ -297,12 +172,11 @@ handleEvent backend s = \case
       Brick.continue (Started (either (message p . Text.pack) id e))
   _ -> Brick.continue s
 
-rackWidget :: [Tiles.Tile] -> Maybe Int -> Brick.Widget ()
-rackWidget ts cursor =
-  maybeCursor $ Brick.hBox $ fmap (border . Brick.str . tileWidget) ts
- where
-  tileWidget Tiles.Blank = " "
-  tileWidget (Tiles.Letter lt) = pure (Tiles.letter lt)
-  maybeCursor = case cursor of
-    Just c -> Brick.showCursor () (Brick.Location (1 + (3 * c), 1))
-    Nothing -> id
+attributes =
+  Brick.attrMap
+    defAttr
+    [ (Attributes.doubleWord, Brick.bg (rgbColor 133 182 255))
+    , (Attributes.tripleWord, Brick.bg (rgbColor 255 156 156))
+    , (Attributes.doubleLetter, Brick.bg (rgbColor 148 219 255))
+    , (Attributes.tripleLetter, Brick.bg (rgbColor 255 201 239))
+    ]
