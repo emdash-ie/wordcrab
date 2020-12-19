@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d92d5ad1751c160573da67723fd93eaad84482fa27b189b0d15386307cc9ff45
+-- hash: 606c3cfef3918e2fe22e5b88669fb44f63abab5e56a2b462b901903be0654114
 
 name:           Wordcrab
 version:        0.1.0.0
@@ -45,23 +45,23 @@ library
   hs-source-dirs:
       src
   build-depends:
-      aeson >=1.4.5 && <1.5
-    , base >=4.7 && <5
+      aeson
+    , base
     , brick
-    , bytestring >=0.10.8.2 && <0.11
+    , bytestring
     , containers
     , http-client
     , http-types
-    , io-streams >=1.5 && <1.6
+    , io-streams
     , lens
-    , network >=3 && <3.2
+    , network
     , random
     , random-shuffle
     , servant
     , servant-client
     , servant-server
     , text
-    , transformers >=0.5.6 && <0.6
+    , transformers
     , vector
     , vty
     , wai-extra
@@ -77,23 +77,23 @@ executable wordcrab-exe
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       Wordcrab
-    , aeson >=1.4.5 && <1.5
-    , base >=4.7 && <5
+    , aeson
+    , base
     , brick
-    , bytestring >=0.10.8.2 && <0.11
+    , bytestring
     , containers
     , http-client
     , http-types
-    , io-streams >=1.5 && <1.6
+    , io-streams
     , lens
-    , network >=3 && <3.2
+    , network
     , random
     , random-shuffle
     , servant
     , servant-client
     , servant-server
     , text
-    , transformers >=0.5.6 && <0.6
+    , transformers
     , vector
     , vty
     , wai-extra
@@ -110,23 +110,23 @@ test-suite Wordcrab-test
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       Wordcrab
-    , aeson >=1.4.5 && <1.5
-    , base >=4.7 && <5
+    , aeson
+    , base
     , brick
-    , bytestring >=0.10.8.2 && <0.11
+    , bytestring
     , containers
     , http-client
     , http-types
-    , io-streams >=1.5 && <1.6
+    , io-streams
     , lens
-    , network >=3 && <3.2
+    , network
     , random
     , random-shuffle
     , servant
     , servant-client
     , servant-server
     , text
-    , transformers >=0.5.6 && <0.6
+    , transformers
     , vector
     , vty
     , wai-extra
