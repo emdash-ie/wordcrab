@@ -28,6 +28,9 @@
    actions right now. Undoing a turn if all players agree seems cool, but not
    fundamental.) Also would be good to put the state in a db so not
    everything is lost if the program crashes or etc.
+*** Start in-memory
+    Useful to have for testing, means I don’t have to add DB code yet. Use a
+    list, foldr to fold the aggregate.
 ** More game features
 *** Winning/losing
 *** Bonus for using all your tiles
