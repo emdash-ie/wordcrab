@@ -1,5 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Wordcrab.GameState where
@@ -16,6 +18,7 @@ import GHC.Generics (Generic)
 import Wordcrab.Board (Board)
 import Wordcrab.Player (Player (..))
 import qualified Wordcrab.Player as Player
+import qualified Wordcrab.Player.Waiting as Player.Waiting
 import qualified Wordcrab.Tiles as Tiles
 
 data Game m = Waiting Room | Started (GameState m) deriving (Generic)
@@ -38,6 +41,8 @@ data GameState m = GameState
   deriving (Generic)
 instance ToJSON (GameState Identity)
 instance FromJSON (GameState Identity)
+instance Show (GameState a) where
+  show GameState{..} = show (_players, _tiles)
 
 newtype Players = Players
   { rotating :: NonEmpty (Integer, Player)
@@ -48,6 +53,19 @@ instance FromJSON Players
 
 initialPlayers :: NonEmpty Player -> Players
 initialPlayers ps = Players (NE.zip (1 :| [2 ..]) ps)
+
+startingPlayers :: [Player.Waiting] -> Maybe Players
+startingPlayers [] = Nothing
+startingPlayers (player : players) =
+  Just (Players (fmap unwait <$> NE.zip (1 :| [2 ..]) (player :| players)))
+ where
+  unwait :: Player.Waiting -> Player
+  unwait Player.Waiting{Player.Waiting._id = id} =
+    Player
+      { Player._id = id
+      , Player._score = 0
+      , Player._rack = []
+      }
 
 nextPlayer :: Players -> Players
 nextPlayer ps =
@@ -74,6 +92,14 @@ join r =
         }
 
 data JoinError = GameHasStarted deriving (Show)
+
+data StartError
+  = NotEnoughPlayers
+  | GameAlreadyStarted (GameState Identity)
+  deriving (Show, Generic)
+
+instance ToJSON StartError
+instance FromJSON StartError
 
 addPlayer :: Player -> Players -> Players
 addPlayer p ps =

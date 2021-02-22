@@ -50,6 +50,7 @@ import qualified Wordcrab.Board as Board
 import Wordcrab.GameState (
   GameState (..),
   JoinError,
+  StartError,
   board,
   currentPlayer,
   players,
@@ -68,6 +69,7 @@ data Backend m = Backend
   , backendPreview :: BackendPlay m
   , backendJoin :: m (Either (BackendError JoinError) (GameState.Room, Player.Id))
   , backendRefresh :: m (Either (BackendError ()) (GameState.Game Identity))
+  , backendStart :: m (Either (BackendError StartError) (GameState Identity))
   }
 
 data BackendError e = SpecificError e | OtherError Text deriving (Show, Generic)

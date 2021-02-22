@@ -100,9 +100,16 @@ webBackend = do
       , backendRefresh = do
           result <- runClientM getState env
           pure (first fromClientError result)
+      , backendStart = do
+          result <- runClientM startGame env
+          pure $ case result of
+            Left e -> Left (Client.OtherError (Text.pack (show e)))
+            Right (Left e) -> Left (Client.SpecificError e)
+            Right (Right x) -> Right x
       }
  where
-  getState :<|> _ :<|> play :<|> preview :<|> _ :<|> joinGame = client Server.wordcrabAPI
+  getState :<|> _ :<|> play :<|> preview :<|> _ :<|> joinGame :<|> startGame =
+    client Server.wordcrabAPI
   httpManager = newManager defaultManagerSettings
   clientEnv = flip mkClientEnv (BaseUrl Http "localhost" 9432 "") <$> httpManager
   fromClientError :: JSON.FromJSON e => ClientError -> BackendError e
@@ -114,8 +121,8 @@ webBackend = do
         (JSON.eitherDecode (responseBody r))
     e -> Client.OtherError ("Something Servanty went wrong: " <> Text.pack (show e))
 
-startGame :: GameState Identity -> Client.State
-startGame gs =
+startGameWith :: GameState Identity -> Client.State
+startGameWith gs =
   Started
     ( InProgress
         { _current = gs
@@ -148,11 +155,17 @@ handleEvent backend s = \case
       Left _ -> Brick.continue s
       Right (GameState.Waiting r) -> Brick.continue (Waiting r)
       Right (GameState.Started gs) -> case s of
-        Waiting r -> Brick.continue (startGame gs)
+        Waiting r -> Brick.continue (startGameWith gs)
         Started ip -> Brick.continue (Started (ip & current .~ gs))
+  Brick.VtyEvent (EvKey (KChar 's') (_ : _)) -> do
+    x <- liftIO (backendStart backend)
+    case x of
+      Left (OtherError text) -> error (Text.unpack text)
+      Left (SpecificError e) -> error (show e)
+      Right gs -> Brick.continue (startGameWith gs)
   Brick.VtyEvent (EvKey (KChar c) _) ->
     case s of
-      Waiting _ -> Brick.halt s
+      Waiting _ -> Brick.continue s
       Started ip -> case c of
         ' ' -> liftIO (placeOrSelectTile backend ip) >>= Brick.continue . Started
         c -> liftIO (updateBlank backend ip c) >>= Brick.continue . Started

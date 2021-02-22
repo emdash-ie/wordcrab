@@ -2,9 +2,9 @@ name:                Wordcrab
 version:             0.1.0.0
 github:              "undergroundquizscene/wordcrab"
 license:             BSD3
-author:              "Noel Bourke"
+author:              "Emily Bourke"
 maintainer:          "undergroundquizscene@protonmail.com"
-copyright:           "Noel Bourke"
+copyright:           "Emily Bourke"
 
 extra-source-files:
 - README.md

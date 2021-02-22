@@ -11,9 +11,9 @@ version:        0.1.0.0
 description:    Please see the README on GitHub at <https://github.com/undergroundquizscene/wordcrab#readme>
 homepage:       https://github.com/undergroundquizscene/wordcrab#readme
 bug-reports:    https://github.com/undergroundquizscene/wordcrab/issues
-author:         Noel Bourke
+author:         Emily Bourke
 maintainer:     undergroundquizscene@protonmail.com
-copyright:      Noel Bourke
+copyright:      Emily Bourke
 license:        BSD3
 license-file:   LICENSE
 build-type:     Simple

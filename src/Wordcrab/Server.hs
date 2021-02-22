@@ -6,32 +6,31 @@
 
 module Wordcrab.Server where
 
-import Control.Monad (join)
 import Control.Monad.IO.Class (MonadIO (liftIO))
 import Control.Monad.Trans.Reader (ReaderT, asks, runReaderT)
-import Data.Aeson (FromJSON, ToJSON, toJSON)
-import Data.Bifunctor (bimap, first)
+import Data.Aeson (FromJSON, ToJSON)
+import Data.Bifunctor (first)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..))
 import Data.Proxy (Proxy (..))
-import Data.Text (Text)
-import qualified Data.Vector as V
-import GHC.Conc (TVar, atomically, newTVar, readTVar, writeTVar)
+import GHC.Conc (TVar, atomically, newTVar, readTVar, readTVarIO, writeTVar)
 import GHC.Generics (Generic)
 import Network.Wai.Handler.Warp (run)
 import Network.Wai.Middleware.RequestLogger (logStdoutDev)
-import Servant (Application, HasServer (..), Post, Server, ServerError (..), err400, hoistServer, serve, throwError, (:<|>) (..))
+import Servant (Application, HasServer (..), Post, ServerError (..), err400, hoistServer, serve, throwError, (:<|>) (..))
 import Servant.API (Get, JSON, Put, ReqBody, (:>))
 import Servant.Server (Handler)
-import Wordcrab.Board (Board (..), Direction (..), PlayError, Position (..), TileInPlay, blankBoard)
+import System.Random (getStdGen)
+
+import Wordcrab.Board (Direction (..), PlayError, Position (..), blankBoard)
 import qualified Wordcrab.Board as Board
-import Wordcrab.GameState (Game (..), GameState (..), Players (..), emptyRoom, initialPlayers, _lastPlayerId)
+import Wordcrab.GameState (Game (..), GameState (..), StartError (..), emptyRoom, _lastPlayerId)
 import qualified Wordcrab.GameState as GameState
 import Wordcrab.PlayResult (PlayResult (..))
-import Wordcrab.Player (Player (..))
 import qualified Wordcrab.Player as Player
 import Wordcrab.Tiles (PlayedTile (..), a, d, m, n, tileScore)
+import qualified Wordcrab.Tiles as Tiles
 
 main :: IO ()
 main = do
@@ -45,6 +44,7 @@ type WordcrabAPI =
     :<|> "preview" :> ReqBody '[JSON] Play :> Get '[JSON] PlayResult
     :<|> "dummy-play" :> Get '[JSON] Play
     :<|> "join" :> Post '[JSON] (GameState.Room, Player.Id)
+    :<|> "start" :> Put '[JSON] (Either StartError (GameState Identity))
 
 data Play = Play
   { position :: Position
@@ -65,7 +65,10 @@ instance FromJSON Play
 -- instance FromJSON PlayResult
 
 server :: ServerT WordcrabAPI AppM
-server = currentState :<|> setState :<|> play :<|> preview :<|> pure dummyPlay :<|> joinGame
+server =
+  currentState :<|> setState :<|> play :<|> preview :<|> pure dummyPlay
+    :<|> joinGame
+    :<|> startGame
 
 wordcrabAPI :: Proxy WordcrabAPI
 wordcrabAPI = Proxy
@@ -73,14 +76,14 @@ wordcrabAPI = Proxy
 app :: ServerState -> Application
 app s = serve wordcrabAPI (hoistServer wordcrabAPI (nt s) server)
 
-data ServerState = ServerState {gameState :: TVar (Game Identity)}
+newtype ServerState = ServerState {gameState :: TVar (Game Identity)}
 
 type AppM = ReaderT ServerState Handler
 
 currentState :: AppM (Game Identity)
 currentState = do
   s <- asks gameState
-  liftIO (atomically (readTVar s))
+  liftIO (readTVarIO s)
 
 setState :: Game Identity -> AppM Bool
 setState new = do
@@ -88,7 +91,7 @@ setState new = do
   liftIO (atomically (writeTVar s new))
   pure True
 
-play :: Play -> AppM (PlayResult)
+play :: Play -> AppM PlayResult
 play p = do
   s <- asks gameState
   result <- liftIO $
@@ -114,10 +117,10 @@ playResult
     ((b, mw, pws), s) <- Board.play position direction tiles tileScore board
     pure (gs{_board = Identity b}, PlayResult b mw pws s)
 
-preview :: Play -> AppM (PlayResult)
+preview :: Play -> AppM PlayResult
 preview p = do
   s <- asks gameState
-  g <- liftIO (atomically (readTVar s))
+  g <- liftIO (readTVarIO s)
   case g of
     Waiting _ ->
       throwError err400{errBody = "Can't play before the game has started"}
@@ -143,6 +146,28 @@ joinGame = do
   case result of
     Right t -> pure t
     Left message -> throwError err400{errBody = message}
+
+startGame :: AppM (Either StartError (GameState Identity))
+startGame = do
+  s <- asks gameState
+  gen <- liftIO getStdGen
+  liftIO $
+    atomically $ do
+      g <- readTVar s
+      case g of
+        Waiting room ->
+          case GameState.startingPlayers (GameState._waitingPlayers room) of
+            Nothing -> pure (Left NotEnoughPlayers)
+            Just players -> do
+              let newState =
+                    GameState
+                      { _board = Identity blankBoard
+                      , _players = players
+                      , _tiles = Tiles.shuffleBag gen Tiles.tileset
+                      }
+              writeTVar s (Started newState)
+              pure (Right newState)
+        Started gameState -> pure (Left (GameAlreadyStarted gameState))
 
 nt :: ServerState -> AppM a -> Handler a
 nt s x = runReaderT x s
