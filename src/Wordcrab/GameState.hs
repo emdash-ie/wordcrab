@@ -7,19 +7,21 @@
 module Wordcrab.GameState where
 
 import Control.Lens (Lens', makeLenses, (%~))
+import Data.Bifunctor (second)
 import Data.Functor ((<&>))
 import Data.Functor.Identity (Identity (..))
 import Data.List.NonEmpty (NonEmpty (..), (<|))
 import qualified Data.List.NonEmpty as NE
 import Data.Maybe (fromMaybe)
-
 import Data.Aeson (FromJSON, ToJSON)
 import GHC.Generics (Generic)
+
 import Wordcrab.Board (Board)
 import Wordcrab.Player (Player (..))
 import qualified Wordcrab.Player as Player
 import qualified Wordcrab.Player.Waiting as Player.Waiting
 import qualified Wordcrab.Tiles as Tiles
+import Wordcrab.Tiles (Tile)
 
 data Game m = Waiting Room | Started (GameState m) deriving (Generic)
 instance ToJSON (Game Identity)
@@ -54,18 +56,25 @@ instance FromJSON Players
 initialPlayers :: NonEmpty Player -> Players
 initialPlayers ps = Players (NE.zip (1 :| [2 ..]) ps)
 
-startingPlayers :: [Player.Waiting] -> Maybe Players
-startingPlayers [] = Nothing
-startingPlayers (player : players) =
-  Just (Players (fmap unwait <$> NE.zip (1 :| [2 ..]) (player :| players)))
+startingPlayers :: NonEmpty Player.Waiting -> [Tile] -> ([Tile], Players)
+startingPlayers (player :| players) tiles =
+  Players . NE.zip indices <$> foldr f (restOfBag, readyPlayer :| []) players
  where
-  unwait :: Player.Waiting -> Player
-  unwait Player.Waiting{Player.Waiting._id = id} =
-    Player
-      { Player._id = id
-      , Player._score = 0
-      , Player._rack = []
-      }
+  indices = 1 :| [2 ..]
+
+  (restOfBag, readyPlayer) = unwait player tiles
+
+  f p (ts, ps) = second (<| ps) (unwait p ts)
+
+unwait :: Player.Waiting -> [Tile] -> ([Tile], Player)
+unwait Player.Waiting{Player.Waiting._id = id} tiles = let
+  player = Player
+    { Player._id = id
+    , Player._score = 0
+    , Player._rack = rack
+    }
+  (rack, restOfBag) = splitAt 7 tiles
+  in (restOfBag, player)
 
 nextPlayer :: Players -> Players
 nextPlayer ps =

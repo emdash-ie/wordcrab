@@ -12,7 +12,7 @@ import Data.Aeson (FromJSON, ToJSON)
 import Data.Bifunctor (first)
 import Data.ByteString.Lazy.Char8 (pack)
 import Data.Functor.Identity (Identity (..))
-import Data.List.NonEmpty (NonEmpty (..))
+import Data.List.NonEmpty (NonEmpty (..), nonEmpty)
 import Data.Proxy (Proxy (..))
 import GHC.Conc (TVar, atomically, newTVar, readTVar, readTVarIO, writeTVar)
 import GHC.Generics (Generic)
@@ -156,14 +156,16 @@ startGame = do
       g <- readTVar s
       case g of
         Waiting room ->
-          case GameState.startingPlayers (GameState._waitingPlayers room) of
+          case nonEmpty (GameState._waitingPlayers room) of
             Nothing -> pure (Left NotEnoughPlayers)
             Just players -> do
+              let tiles = Tiles.shuffleBag gen Tiles.tileset
+              let (restOfBag, readyPlayers) = GameState.startingPlayers players tiles
               let newState =
                     GameState
                       { _board = Identity blankBoard
-                      , _players = players
-                      , _tiles = Tiles.shuffleBag gen Tiles.tileset
+                      , _players = readyPlayers
+                      , _tiles = restOfBag
                       }
               writeTVar s (Started newState)
               pure (Right newState)
