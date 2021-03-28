@@ -42,17 +42,22 @@ import Servant.Client (
  )
 import System.Random (getStdGen)
 
+import Control.Applicative ((<|>))
+import qualified Wordcrab.API as API
 import qualified Wordcrab.Board as Board
 import qualified Wordcrab.Brick.Attributes as Attributes
 import qualified Wordcrab.Brick.Widgets as Widgets
 import Wordcrab.Client hiding (State)
 import qualified Wordcrab.Client as Client
-import Wordcrab.GameState (GameState (..), JoinError (..), board, currentPlayer, players, tiles, toPreviewState)
+import Wordcrab.GameState (GameState (..), JoinError (..), board, players, tiles, toPreviewState)
 import qualified Wordcrab.GameState as GameState
+import Wordcrab.GameState.Play (Play (Play))
+import qualified Wordcrab.GameState.Play as GameState.Play
 import Wordcrab.PlayResult (PlayResult (..), mainWord, newBoard, perpendicularWords)
 import qualified Wordcrab.PlayResult as PlayResult
 import Wordcrab.Player (Player (..), rack, score)
 import qualified Wordcrab.Player as Player
+import Wordcrab.Room (Room)
 import qualified Wordcrab.Server as Server
 import qualified Wordcrab.Tiles as Tiles
 
@@ -69,13 +74,13 @@ main = do
   let app :: App Client.State e ()
       app =
         App
-          { appDraw = \s -> case s of
+          { appDraw = \case
               Waiting r -> Widgets.waitingRoom r
               Started ip -> Widgets.inProgress ip
           , appChooseCursor = Brick.showFirstCursor
           , appHandleEvent = handleEvent backend
           , appStartEvent = pure
-          , appAttrMap = \s -> attributes
+          , appAttrMap = const attributes
           }
       (startingRack1, (startingRack2, bag)) =
         splitAt 7 <$> splitAt 7 (Tiles.shuffleBag gen Tiles.tileset)
@@ -89,10 +94,10 @@ webBackend = do
   pure $
     Backend
       { backendPreview = \p d ts _ -> do
-          result <- runClientM (preview (Server.Play p d ts)) env
+          result <- runClientM (preview (Play p d ts)) env
           pure (first fromClientError result)
-      , backendPlay = \p d ts _ -> do
-          result <- runClientM (play (Server.Play p d ts)) env
+      , backendPlay = \player p d ts _ -> do
+          result <- runClientM (play (API.AttributedPlay player (Play p d ts))) env
           pure (first fromClientError result)
       , backendJoin = do
           result <- runClientM joinGame env
@@ -102,13 +107,10 @@ webBackend = do
           pure (first fromClientError result)
       , backendStart = do
           result <- runClientM startGame env
-          pure $ case result of
-            Left e -> Left (Client.OtherError (Text.pack (show e)))
-            Right (Left e) -> Left (Client.SpecificError e)
-            Right (Right x) -> Right x
+          pure (first fromClientError result)
       }
  where
-  getState :<|> _ :<|> play :<|> preview :<|> _ :<|> joinGame :<|> startGame =
+  getState :<|> play :<|> preview :<|> joinGame :<|> startGame =
     client Server.wordcrabAPI
   httpManager = newManager defaultManagerSettings
   clientEnv = flip mkClientEnv (BaseUrl Http "localhost" 9432 "") <$> httpManager
@@ -116,13 +118,13 @@ webBackend = do
   fromClientError = \case
     FailureResponse _ r ->
       either
-        (const (Client.OtherError (Text.pack (show r))))
+        (Text.pack >>> Client.OtherError)
         Client.SpecificError
-        (JSON.eitherDecode (responseBody r))
+        (JSON.eitherDecode (responseBody r) <|> Left (show r))
     e -> Client.OtherError ("Something Servanty went wrong: " <> Text.pack (show e))
 
-startGameWith :: GameState Identity -> Client.State
-startGameWith gs =
+startGameWith :: Room -> GameState Identity -> Client.State
+startGameWith room gs =
   Started
     ( InProgress
         { _current = gs
@@ -130,6 +132,7 @@ startGameWith gs =
         , _boardCursor = (0, 0)
         , _rackCursor = Nothing
         , _messages = []
+        , _room = room
         }
     )
 
@@ -153,16 +156,19 @@ handleEvent backend s = \case
     g <- liftIO (backendRefresh backend)
     case g of
       Left _ -> Brick.continue s
-      Right (GameState.Waiting r) -> Brick.continue (Waiting r)
-      Right (GameState.Started gs) -> case s of
-        Waiting r -> Brick.continue (startGameWith gs)
+      Right Nothing -> Brick.continue s
+      Right (Just gs) -> case s of
+        Waiting r -> Brick.continue (startGameWith r gs)
         Started ip -> Brick.continue (Started (ip & current .~ gs))
-  Brick.VtyEvent (EvKey (KChar 's') (_ : _)) -> do
-    x <- liftIO (backendStart backend)
-    case x of
-      Left (OtherError text) -> error (Text.unpack text)
-      Left (SpecificError e) -> error (show e)
-      Right gs -> Brick.continue (startGameWith gs)
+  Brick.VtyEvent (EvKey (KChar 's') (_ : _)) -> case s of
+    Waiting r -> do
+      x <- liftIO (backendStart backend)
+      case x of
+        Left (OtherError text) -> error (Text.unpack text)
+        Left (SpecificError e) -> error (show e)
+        Right (API.GameNotStarted e) -> error (show e)
+        Right (API.GameStarted gs) -> Brick.continue (startGameWith r gs)
+    s -> Brick.continue s
   Brick.VtyEvent (EvKey (KChar c) _) ->
     case s of
       Waiting _ -> Brick.continue s

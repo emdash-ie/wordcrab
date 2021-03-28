@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 
 -- | Brick Widgets for use in Wordcrab UIs
 module Wordcrab.Brick.Widgets (
@@ -55,12 +56,12 @@ import qualified Wordcrab.Client as Client
 import Wordcrab.GameState (
   GameState (..),
   JoinError (..),
-  currentPlayer,
   players,
   tiles,
   toPreviewState,
  )
 import qualified Wordcrab.GameState as GameState
+import qualified Wordcrab.GameState.Event as GameState.Event
 import Wordcrab.PlayResult (
   PlayResult (..),
   mainWord,
@@ -69,13 +70,14 @@ import Wordcrab.PlayResult (
  )
 import qualified Wordcrab.PlayResult as PlayResult
 import qualified Wordcrab.Player as Player
+import Wordcrab.Room (Room (..))
 import qualified Wordcrab.Tiles as Tiles
 
-waitingRoom :: GameState.Room -> [Brick.Widget ()]
-waitingRoom r =
+waitingRoom :: Room -> [Brick.Widget ()]
+waitingRoom Room{..} =
   [ Brick.str
       ( "In the waiting room. Last player to join was: "
-          <> show (GameState._lastPlayerId r)
+          <> show _nextPlayerId
       )
   ]
 
@@ -89,7 +91,7 @@ inProgress s =
           , rack
               ( s
                   ^. Client.preview . Client.gameState . GameState.players
-                    . GameState.currentPlayer
+                    . GameState.Event.currentPlayer
                     . Player.rack
               )
               (s ^. Client.rackCursor)
@@ -111,18 +113,18 @@ rack ts cursor =
     Just c -> Brick.showCursor () (Brick.Location (1 + (3 * c), 1))
     Nothing -> id
 
-scoreBox :: GameState.Players -> Maybe PlayResult -> Brick.Widget n
+scoreBox :: GameState.Event.Players -> Maybe PlayResult -> Brick.Widget n
 scoreBox ps result =
   Brick.vBox $
     ( \(i, p) ->
         Brick.hLimit 61 $
           Brick.strWrap $
             playerNameString i
-              <> if p == ps ^. currentPlayer
+              <> if p == ps ^. GameState.Event.currentPlayer
                 then scoreString p <> " (" <> moveString result <> ")"
                 else scoreString p
     )
-      <$> zip [1 ..] (NE.toList $ GameState.turnOrder ps)
+      <$> zip [1 ..] (NE.toList $ GameState.Event.turnOrder ps)
 
 playerNameString i = "Player " <> show i <> ": "
 

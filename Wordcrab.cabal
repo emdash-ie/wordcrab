@@ -13,16 +13,20 @@ extra-source-files:
 
 library
   exposed-modules:
+      Wordcrab.API
       Wordcrab.Board
       Wordcrab.Brick
       Wordcrab.Brick.Attributes
       Wordcrab.Brick.Widgets
       Wordcrab.Client
       Wordcrab.GameState
+      Wordcrab.GameState.Event
+      Wordcrab.GameState.Play
       Wordcrab.Player
       Wordcrab.Player.Id
       Wordcrab.Player.Waiting
       Wordcrab.PlayResult
+      Wordcrab.Room
       Wordcrab.Server
       Wordcrab.Test
       Wordcrab.Tiles

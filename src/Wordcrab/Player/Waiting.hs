@@ -10,6 +10,7 @@ import Wordcrab.Player.Id
 data Waiting = Waiting
   { _id :: Id
   }
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Ord, Generic, Show)
+
 instance ToJSON Waiting
 instance FromJSON Waiting

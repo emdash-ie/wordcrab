@@ -5,6 +5,7 @@ module Wordcrab.Board (
   Direction (..),
   PlayedWhen (..),
   Position (..),
+  ValidPosition,
   TileInPlay,
   Square (..),
   SquareType (..),

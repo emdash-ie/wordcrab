@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -45,6 +46,10 @@ import Data.Text (Text, pack)
 import qualified Data.Vector as V
 import GHC.Generics (Generic)
 
+import Data.Functor ((<&>))
+import Data.Void (Void, absurd)
+import Wordcrab.API (StartGameResponse)
+import qualified Wordcrab.API as API
 import Wordcrab.Board (Board)
 import qualified Wordcrab.Board as Board
 import Wordcrab.GameState (
@@ -52,24 +57,26 @@ import Wordcrab.GameState (
   JoinError,
   StartError,
   board,
-  currentPlayer,
   players,
   tiles,
   toPreviewState,
  )
 import qualified Wordcrab.GameState as GameState
+import Wordcrab.GameState.Event (currentPlayer)
+import qualified Wordcrab.GameState.Event as GameState.Event
 import Wordcrab.PlayResult (PlayResult, newBoard)
 import qualified Wordcrab.PlayResult as PlayResult
 import Wordcrab.Player (rack)
 import qualified Wordcrab.Player as Player
+import Wordcrab.Room (Room)
 import qualified Wordcrab.Tiles as Tiles
 
 data Backend m = Backend
-  { backendPlay :: BackendPlay m
+  { backendPlay :: Player.Id -> BackendPlay m
   , backendPreview :: BackendPlay m
-  , backendJoin :: m (Either (BackendError JoinError) (GameState.Room, Player.Id))
-  , backendRefresh :: m (Either (BackendError ()) (GameState.Game Identity))
-  , backendStart :: m (Either (BackendError StartError) (GameState Identity))
+  , backendJoin :: m (Either (BackendError JoinError) (Room, Player.Id))
+  , backendRefresh :: m (Either (BackendError ()) (Maybe (GameState Identity)))
+  , backendStart :: m (Either (BackendError Void) (StartGameResponse StartError))
   }
 
 data BackendError e = SpecificError e | OtherError Text deriving (Show, Generic)
@@ -81,14 +88,15 @@ type BackendPlay m =
   Board.Direction ->
   NonEmpty Tiles.PlayedTile ->
   Board.Board Tiles.PlayedTile ->
-  m (Either (BackendError (Board.PlayError Tiles.PlayedTile)) PlayResult)
+  m (Either (BackendError Void) (API.PlayResponse API.PlayError))
 
 data State
-  = Waiting GameState.Room
+  = Waiting Room
   | Started InProgress
 
 data InProgress = InProgress
-  { _current :: GameState Identity
+  { _room :: Room
+  , _current :: GameState Identity
   , _preview :: Preview
   , _boardCursor :: (Int, Int)
   , _rackCursor :: Maybe Int
@@ -144,7 +152,8 @@ placeTile backend cs = do
 
 confirmPlay :: Monad m => Backend m -> InProgress -> m InProgress
 confirmPlay b cs = do
-  (error, newState) <- updatePreview (backendPlay b) cs
+  let playerID = cs ^. current . players . currentPlayer . Player.id
+  (error, newState) <- updatePreview (backendPlay b playerID) cs
   pure $ case error of
     Just e -> message cs $ "Can’t play: invalid move (" <> pack (show e) <> ")"
     Nothing ->
@@ -159,7 +168,7 @@ confirmPlay b cs = do
                 & current . players . currentPlayer . Player.score .~ newScore
                 & current . board .~ Identity b
                 & current . players . currentPlayer . rack .~ (remainingTiles <> newTiles)
-                & current . players %~ GameState.nextPlayer
+                & current . players %~ GameState.Event.nextPlayer
                 & current . tiles .~ newBag
                 & preview . placed .~ Map.empty
                 & \cs' -> cs' & preview . gameState .~ toPreviewState (cs' ^. current)
@@ -192,19 +201,21 @@ updatePreview backendPlay cs = do
     Left NoTiles -> pure cs
     Left InconsistentDirection -> pure cs
     Right (p, d, ts) -> do
-      m <- backendPlay p d ts (runIdentity $ cs ^. current . board)
-      pure $ case m of
-        Right pr ->
+      backendPlay p d ts (runIdentity $ cs ^. current . board) <&> \case
+        Left (OtherError e) -> message cs ("Something went wrong: " <> e)
+        Left (SpecificError e) -> absurd e
+        Right (API.PlaySuccessful pr) ->
           cs & preview . gameState . board .~ Right (pr ^. newBoard)
             & preview . gameState . players . currentPlayer . Player.score
               .~ ( (pr ^. PlayResult.score)
                     + (cs ^. current . players . currentPlayer . Player.score)
                  )
             & preview . playResult .~ Just pr
-        Left (SpecificError e) ->
+        Right (API.PlayUnsuccessful API.NoGameInProgress) ->
+          message cs "There is no game in progress"
+        Right (API.PlayUnsuccessful (API.PlayError e)) ->
           cs & preview . gameState . board .~ Left e
             & preview . playResult .~ Nothing
-        Left (OtherError e) -> message cs e
   let db =
         foldr
           (\(xy, t) b -> updateBoard xy t b)
