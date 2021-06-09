@@ -27,7 +27,7 @@ library
       Wordcrab.Test
       Wordcrab.Tiles
   other-modules:
-      Paths_Wordcrab
+      Paths_wordcrab
   hs-source-dirs:
       src
   build-depends:
@@ -36,6 +36,7 @@ library
       brick,
       bytestring,
       containers,
+      haskell-language-server,
       http-client,
       http-types,
       io-streams,
@@ -57,12 +58,12 @@ library
 executable wordcrab-exe
   main-is: Main.hs
   other-modules:
-      Paths_Wordcrab
+      Paths_wordcrab
   hs-source-dirs:
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      Wordcrab,
+      wordcrab,
       aeson,
       base,
       brick,
