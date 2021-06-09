@@ -1,29 +1,15 @@
-cabal-version: 1.12
+cabal-version:      2.4
+name:               wordcrab
+version:            1.0.0
+synopsis:           An implementation of Scrabble
+license:            GPL-3.0-or-later
+author:             Emily Bourke
+copyright:          Emily Bourke
+maintainer:         undergroundquizscene@protonmail.com
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
---
--- see: https://github.com/sol/hpack
---
--- hash: 606c3cfef3918e2fe22e5b88669fb44f63abab5e56a2b462b901903be0654114
-
-name:           Wordcrab
-version:        0.1.0.0
-description:    Please see the README on GitHub at <https://github.com/undergroundquizscene/wordcrab#readme>
-homepage:       https://github.com/undergroundquizscene/wordcrab#readme
-bug-reports:    https://github.com/undergroundquizscene/wordcrab/issues
-author:         Emily Bourke
-maintainer:     undergroundquizscene@protonmail.com
-copyright:      Emily Bourke
-license:        BSD3
-license-file:   LICENSE
-build-type:     Simple
 extra-source-files:
     README.md
     ChangeLog.md
-
-source-repository head
-  type: git
-  location: https://github.com/undergroundquizscene/wordcrab
 
 library
   exposed-modules:
@@ -45,27 +31,27 @@ library
   hs-source-dirs:
       src
   build-depends:
-      aeson
-    , base
-    , brick
-    , bytestring
-    , containers
-    , http-client
-    , http-types
-    , io-streams
-    , lens
-    , network
-    , random
-    , random-shuffle
-    , servant
-    , servant-client
-    , servant-server
-    , text
-    , transformers
-    , vector
-    , vty
-    , wai-extra
-    , warp
+      aeson,
+      base,
+      brick,
+      bytestring,
+      containers,
+      http-client,
+      http-types,
+      io-streams,
+      lens,
+      network,
+      random,
+      random-shuffle,
+      servant,
+      servant-client,
+      servant-server,
+      text,
+      transformers,
+      vector,
+      vty,
+      wai-extra,
+      warp
   default-language: Haskell2010
 
 executable wordcrab-exe
@@ -76,59 +62,26 @@ executable wordcrab-exe
       app
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      Wordcrab
-    , aeson
-    , base
-    , brick
-    , bytestring
-    , containers
-    , http-client
-    , http-types
-    , io-streams
-    , lens
-    , network
-    , random
-    , random-shuffle
-    , servant
-    , servant-client
-    , servant-server
-    , text
-    , transformers
-    , vector
-    , vty
-    , wai-extra
-    , warp
-  default-language: Haskell2010
-
-test-suite Wordcrab-test
-  type: exitcode-stdio-1.0
-  main-is: Spec.hs
-  other-modules:
-      Paths_Wordcrab
-  hs-source-dirs:
-      test
-  ghc-options: -threaded -rtsopts -with-rtsopts=-N
-  build-depends:
-      Wordcrab
-    , aeson
-    , base
-    , brick
-    , bytestring
-    , containers
-    , http-client
-    , http-types
-    , io-streams
-    , lens
-    , network
-    , random
-    , random-shuffle
-    , servant
-    , servant-client
-    , servant-server
-    , text
-    , transformers
-    , vector
-    , vty
-    , wai-extra
-    , warp
+      Wordcrab,
+      aeson,
+      base,
+      brick,
+      bytestring,
+      containers,
+      http-client,
+      http-types,
+      io-streams,
+      lens,
+      network,
+      random,
+      random-shuffle,
+      servant,
+      servant-client,
+      servant-server,
+      text,
+      transformers,
+      vector,
+      vty,
+      wai-extra,
+      warp
   default-language: Haskell2010

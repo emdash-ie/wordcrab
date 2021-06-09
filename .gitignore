@@ -1,4 +1,4 @@
-.stack-work/
-Scrabble.cabal
+wordcrab.cabal
 *~
 /dist-newstyle
+wordcrab.nix
