@@ -19,6 +19,9 @@ import qualified Wordcrab.Tiles as Tiles
 data Event
   = StartGame Players [Tiles.Tile]
   | Play Player.Id Play.Play
+    -- ^ This player plays these tiles in these places.
+  | Draw Player.Id Integer
+    -- ^ This player draws this many tiles from the bag.
   deriving (Show, Generic)
 
 instance ToJSON Event
